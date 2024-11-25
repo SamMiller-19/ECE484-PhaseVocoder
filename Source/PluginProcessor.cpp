@@ -166,22 +166,91 @@ bool ECE484PhaseVocoderAudioProcessor::hasEditor() const
 
 juce::AudioProcessorEditor* ECE484PhaseVocoderAudioProcessor::createEditor()
 {
-    return new ECE484PhaseVocoderAudioProcessorEditor (*this);
+    //return new ECE484PhaseVocoderAudioProcessorEditor (*this);
+    return new juce::GenericAudioProcessorEditor(*this);
 }
 
 //==============================================================================
 void ECE484PhaseVocoderAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
+    auto state = layout.copyState();
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+    copyXmlToBinary(*xml, destData);
 }
 
 void ECE484PhaseVocoderAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
+    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+
+    if (xmlState.get() != nullptr)
+        if (xmlState->hasTagName(layout.state.getType()))
+            layout.replaceState(juce::ValueTree::fromXml(*xmlState));
 }
+
+Pluginsettings getPluginSettings(juce::AudioProcessorValueTreeState& layout) {
+
+    Pluginsettings settings;
+    settings.LFOfreq = layout.getRawParameterValue("LFO Freq")->load();
+    settings.LFOmag = layout.getRawParameterValue("LFO Magnitude")->load();
+    settings.delay = layout.getRawParameterValue("Delay")->load();
+    settings.delayGain = layout.getRawParameterValue("Delay Gain")->load();
+    settings.feedbackGain = layout.getRawParameterValue("Feedback Gain")->load();
+    settings.dryGain = layout.getRawParameterValue("Dry Gain")->load();
+    settings.delayType = layout.getRawParameterValue("LFO Type")->load();
+
+
+    return settings;
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout
+ECE484PhaseVocoderAudioProcessor::createParamaterLayout() {
+
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add(std::make_unique <juce::AudioParameterFloat>(
+        "LFO Freq",
+        "LFO Freq",
+        juce::NormalisableRange<float>(0.0f, 5.f, 0.05f),
+        0.0f));
+    layout.add(std::make_unique <juce::AudioParameterFloat>(
+        "LFO Magnitude",
+        "LFO Magnitude in ms",
+        juce::NormalisableRange<float>(0.0f, 100.f, 0.05f, 0.3f),
+        0.f));
+
+    layout.add(std::make_unique <juce::AudioParameterFloat>(
+        "Delay",
+        "Delay in ms",
+        juce::NormalisableRange<float>(0.0f, 1000.f, 1.f, 0.3f),
+        0.0f));
+
+    layout.add(std::make_unique <juce::AudioParameterFloat>(
+        "Delay Gain",
+        "Feedforward Gain",
+        juce::NormalisableRange<float>(0.0f, 1.f, 0.01f),
+        0.0f));
+
+    layout.add(std::make_unique <juce::AudioParameterFloat>(
+        "Feedback Gain",
+        "Feedback Gain",
+        juce::NormalisableRange<float>(0.0f, 1.f, 0.01f),
+        0.0f));
+
+    layout.add(std::make_unique <juce::AudioParameterFloat>(
+        "Dry Gain",
+        "Dry Gain",
+        juce::NormalisableRange<float>(0.0f, 1.f, 0.01f),
+        0.0f));
+
+    layout.add(std::make_unique <juce::AudioParameterBool>
+        ("LFO Type",
+            "Chorusing",
+            0));
+
+    return layout;
+
+}
+
 
 //==============================================================================
 // This creates new instances of the plugin..

@@ -10,6 +10,24 @@
 
 #include <JuceHeader.h>
 
+enum {
+    Sine = false,
+    Noise = true
+};
+
+struct Pluginsettings
+{
+    float LFOfreq{ 0 };
+    float LFOmag{ 0 };
+    float delay{ 0 };
+    float delayGain{ 0 };
+    float feedbackGain{ 0 };
+    float dryGain{ 0 };
+    bool delayType{ Sine };
+
+};
+
+Pluginsettings getPluginSettings(juce::AudioProcessorValueTreeState& layout);
 //==============================================================================
 /**
 */
@@ -52,6 +70,10 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+
+    static juce::AudioProcessorValueTreeState::ParameterLayout
+        createParamaterLayout();
+    juce::AudioProcessorValueTreeState layout{ *this, nullptr, "Paramaters", createParamaterLayout() };
 
 private:
     //==============================================================================
