@@ -11,19 +11,15 @@
 #include <JuceHeader.h>
 
 enum {
-    Sine = false,
-    Noise = true
+    Shift=0,
+    Robitization = 1,
+    Whisperization = 2
 };
 
 struct Pluginsettings
 {
-    float LFOfreq{ 0 };
-    float LFOmag{ 0 };
-    float delay{ 0 };
-    float delayGain{ 0 };
-    float feedbackGain{ 0 };
-    float dryGain{ 0 };
-    bool delayType{ Sine };
+    float pitchShift{ 0 };
+    bool effect{ Shift };
 
 };
 

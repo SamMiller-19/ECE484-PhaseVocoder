@@ -190,13 +190,8 @@ void ECE484PhaseVocoderAudioProcessor::setStateInformation (const void* data, in
 Pluginsettings getPluginSettings(juce::AudioProcessorValueTreeState& layout) {
 
     Pluginsettings settings;
-    settings.LFOfreq = layout.getRawParameterValue("LFO Freq")->load();
-    settings.LFOmag = layout.getRawParameterValue("LFO Magnitude")->load();
-    settings.delay = layout.getRawParameterValue("Delay")->load();
-    settings.delayGain = layout.getRawParameterValue("Delay Gain")->load();
-    settings.feedbackGain = layout.getRawParameterValue("Feedback Gain")->load();
-    settings.dryGain = layout.getRawParameterValue("Dry Gain")->load();
-    settings.delayType = layout.getRawParameterValue("LFO Type")->load();
+    settings.pitchShift = layout.getRawParameterValue("Pitch Shift in Semitones")->load();
+    settings.effect = layout.getRawParameterValue("Effect")->load();
 
 
     return settings;
@@ -208,45 +203,18 @@ ECE484PhaseVocoderAudioProcessor::createParamaterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
     layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "LFO Freq",
-        "LFO Freq",
-        juce::NormalisableRange<float>(0.0f, 5.f, 0.05f),
-        0.0f));
-    layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "LFO Magnitude",
-        "LFO Magnitude in ms",
-        juce::NormalisableRange<float>(0.0f, 100.f, 0.05f, 0.3f),
-        0.f));
-
-    layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "Delay",
-        "Delay in ms",
-        juce::NormalisableRange<float>(0.0f, 1000.f, 1.f, 0.3f),
+        "Pitch Shift in Semitones",
+        "Pitch Shift in Semitones",
+        juce::NormalisableRange<float>(-5.f,5.f,1.f),
         0.0f));
 
-    layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "Delay Gain",
-        "Feedforward Gain",
-        juce::NormalisableRange<float>(0.0f, 1.f, 0.01f),
-        0.0f));
 
-    layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "Feedback Gain",
-        "Feedback Gain",
-        juce::NormalisableRange<float>(0.0f, 1.f, 0.01f),
-        0.0f));
+    juce::StringArray stringArray;
+    stringArray.add("Pitch Shift");
+    stringArray.add("Robitization");
+    stringArray.add("Whisperization");
 
-    layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "Dry Gain",
-        "Dry Gain",
-        juce::NormalisableRange<float>(0.0f, 1.f, 0.01f),
-        0.0f));
-
-    layout.add(std::make_unique <juce::AudioParameterBool>
-        ("LFO Type",
-            "Chorusing",
-            0));
-
+    layout.add(std::make_unique<juce::AudioParameterChoice>("Effect", "Effect", stringArray, 0));
     return layout;
 
 }
