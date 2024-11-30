@@ -74,4 +74,50 @@ public:
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ECE484PhaseVocoderAudioProcessor)
+  
+
+    //Initialize another vector for the FFT data of each window
+    juce::AudioBuffer<float>  circBuffer;
+    int writePosition{ 0 };
+    int readPosition{ 0 }; 
+
+    //Initialize vectors for FFT data, we get this to be a 1x2 vector to start resize # rows according to FFT size later
+    std::vector<float> fftComplex;
+
+
+
+    //Initialize hop and window size
+    const int s_win{ 256 };
+    const int s_hop{ 256 };
+
+    //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
+    const int s_fft{ 2 * s_win };
+
+    //initialize delay buffer size
+    const int s_circBuffer{ s_win * 2 };
+
+    //Initialize an FFT object
+    juce::dsp::FFT forwardFFT{(int)log2(s_win)};
+
+    //User Defined functions
+
+
+    
+    //Copy audio buffer into a vector
+    void ECE484PhaseVocoderAudioProcessor::copyAudiotoVector(float* bufferData, std::vector<float>& Vector, int bufferStart, int copySize);
+
+    //Hann window a vector of data
+    void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size);
+
+    //Circular shift data of size by shift t
+    void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector, int size, unsigned int shift);
+
+    //Update Circular buffer froma provided vector
+    void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(std::vector<float>& Vector, int numSamples, int channel);
+
+    //Update an output buffer with the circular buffer starting at the read position
+    void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(juce::AudioBuffer<float>& buffer, int outputStart, int numSamples, int channel);
+
+
+
 };
