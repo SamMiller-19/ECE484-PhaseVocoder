@@ -88,7 +88,7 @@ private:
 
     //Initialize hop and window size
     const int s_win{ 64 };
-    const int s_hop{ 64 };
+    const int s_hop{ 32 };
 
     //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
     const int s_fft{ 2 * s_win };

@@ -156,7 +156,7 @@ void ECE484PhaseVocoderAudioProcessor::copyAudiotoVector(float* bufferData, std:
 void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size) {
     for (int i = 0; i < size; i++) {
         //multiply each index by it's sinusoidal equivilaent
-        Vector[i] = Vector[i] * sin(3.14159 * (float)i / (float)size);
+        Vector[i] = Vector[i] * 0.5 * (1 - cos(i * 2 * 3.1415) / size);
 
     }
 
@@ -190,13 +190,10 @@ void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(std::vector<float>& Vect
         if (writePosition >= s_circBuffer) {
             writePosition = 0;
         }
-        if (i < numSamples / 2) {
-            //CHANGE THIS TO PLUS AT SOME POINT PLEASE
-            circData[writePosition] = Vector[i];
-        }
-        else {
-            circData[writePosition] = Vector[i];
-        }
+        //Add the vector to what's already in that write position
+
+        circData[writePosition] =+ Vector[i];
+
 
     }
    
@@ -205,22 +202,21 @@ void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(std::vector<float>& Vect
 //Update a set number of samples from the circular buffer
 void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(float* outputData, int outputStart, int numSamples, int channel) {
     
-    auto* circData = circBuffer.getReadPointer(channel);
+    auto* circData = circBuffer.getWritePointer(channel);
 
     for (int i = 0; i < numSamples; i++) {
-        //Update the write posisiton
+        //Update the read posisiton
         readPosition++;
         if (readPosition >= s_circBuffer) {
             readPosition = 0;
         }
-        if (i < numSamples / 2) {
-            //CHANGE THIS TO PLUS AT SOME POINT PLEASE
-            outputData[i + outputStart] = circData[readPosition];
-        }
-        else {
-            outputData[i + outputStart] = circData[readPosition];
-        }
 
+        outputData[i + outputStart] = circData[readPosition];
+
+
+        //After it's gone to the output data it can be cleared
+        circData[readPosition] = 0;
+        
     }
 
 
@@ -250,7 +246,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     //3. Add this to
     
      //Itterate through each window 
-    for (int window = 0; window < numSamples / s_hop; window++) {
+    for (int window = 0; window < numSamples / s_hop-1; window++) {
        
 
 
@@ -283,7 +279,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 
                 //Find the phase and magnitude
                 //float angle = arg(complexData);
-              // float magnitude = abs(complexData);
+                //float magnitude = abs(complexData);
 
 
                 //Do processing right now this is robotization
@@ -297,7 +293,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 //complexData = std::polar(magnitude, angle);
 
                 //Store back into the original vector
-             //   fftComplex[2 * bin] = complexData.real();
+                //fftComplex[2 * bin] = complexData.real();
                // fftComplex[2 * bin + 1] = complexData.imag();
 
             }
