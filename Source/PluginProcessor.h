@@ -87,8 +87,8 @@ private:
 
 
     //Initialize hop and window size
-    const int s_win{ 256 };
-    const int s_hop{ 256 };
+    const int s_win{ 64 };
+    const int s_hop{ 64 };
 
     //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
     const int s_fft{ 2 * s_win };
@@ -116,7 +116,7 @@ private:
     void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(std::vector<float>& Vector, int numSamples, int channel);
 
     //Update an output buffer with the circular buffer starting at the read position
-    void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(juce::AudioBuffer<float>& buffer, int outputStart, int numSamples, int channel);
+    void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(float* outputData, int outputStart, int numSamples, int channel);
 
 
 

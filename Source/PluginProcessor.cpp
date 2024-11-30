@@ -179,23 +179,23 @@ void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector,
 void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(std::vector<float>& Vector, int numSamples, int channel) {
 
     //i is only used to itterate the vector write posisiton is used for the buffer
-    auto* bufferData = circBuffer.getWritePointer(channel);
-    int i = 0;
+    auto* circData = circBuffer.getWritePointer(channel);
     //The way we have this set up the first half of the data is overlapping with past data, the second half of the data
     //Shouldn't overlap anything and will be overlapped by future data. As such they should be treated differently
 
 
-    for (i = 0; i < numSamples; i++) {
+    for (int i = 0; i < numSamples; i++) {
         //Update the write posisiton
         writePosition++;
         if (writePosition >= s_circBuffer) {
             writePosition = 0;
         }
         if (i < numSamples / 2) {
-            bufferData[writePosition] += Vector[i];
+            //CHANGE THIS TO PLUS AT SOME POINT PLEASE
+            circData[writePosition] = Vector[i];
         }
         else {
-            bufferData[writePosition] = Vector[i];
+            circData[writePosition] = Vector[i];
         }
 
     }
@@ -203,20 +203,27 @@ void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(std::vector<float>& Vect
 
 }
 //Update a set number of samples from the circular buffer
-void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(juce::AudioBuffer<float>& buffer, int outputStart, int numSamples, int channel) {
+void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(float* outputData, int outputStart, int numSamples, int channel) {
     
-    if (readPosition + numSamples < s_circBuffer) {
-        buffer.copyFrom(channel, outputStart, circBuffer, channel, readPosition, numSamples);
-        readPosition += numSamples;
+    auto* circData = circBuffer.getReadPointer(channel);
+
+    for (int i = 0; i < numSamples; i++) {
+        //Update the write posisiton
+        readPosition++;
+        if (readPosition >= s_circBuffer) {
+            readPosition = 0;
+        }
+        if (i < numSamples / 2) {
+            //CHANGE THIS TO PLUS AT SOME POINT PLEASE
+            outputData[i + outputStart] = circData[readPosition];
+        }
+        else {
+            outputData[i + outputStart] = circData[readPosition];
+        }
 
     }
-    else {
-        int firstCopyAmount = s_circBuffer - readPosition;
-        int secondCopyAmount = numSamples - firstCopyAmount;
-        buffer.copyFrom(channel, outputStart, circBuffer, channel, readPosition, firstCopyAmount);
-        buffer.copyFrom(channel, outputStart+firstCopyAmount, circBuffer, channel, 0, secondCopyAmount); 
-        readPosition = secondCopyAmount;
-    }
+
+
 
 
 }
@@ -260,10 +267,10 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             copyAudiotoVector(bufferData, fftComplex, window * s_hop, s_win);
 
             //apply the hann windowing
-            //hannWindow(fftComplex, s_win);
+            hannWindow(fftComplex, s_win);
 
             //shift data to the left, this is to ensure phase is flat
-           // circularShift(fftComplex, s_win, s_win / 2);
+            circularShift(fftComplex, s_win, s_win / 2);
 
 
             //Now we perform the FFT on the data stored in same location
@@ -272,11 +279,11 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //Now we go through each bin and do frequency processing
             for (int bin = 0; bin < s_win; bin++) {
                 //Put the 2 values into a complex constructor so it's easier to modify
-                std::complex<float> complexData (fftComplex[2*bin], fftComplex[2*bin+1]);
+                //std::complex<float> complexData (fftComplex[2*bin], fftComplex[2*bin+1]);
                 
                 //Find the phase and magnitude
-                float angle = arg(complexData);
-               float magnitude = abs(complexData);
+                //float angle = arg(complexData);
+              // float magnitude = abs(complexData);
 
 
                 //Do processing right now this is robotization
@@ -287,24 +294,24 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 /*------------------------TODO Processing--------------------------*/
                 
                 //Convert back to complex number
-                complexData = std::polar(magnitude, angle);
+                //complexData = std::polar(magnitude, angle);
 
                 //Store back into the original vector
-                fftComplex[2 * bin] = complexData.real();
-                fftComplex[2 * bin + 1] = complexData.imag();
+             //   fftComplex[2 * bin] = complexData.real();
+               // fftComplex[2 * bin + 1] = complexData.imag();
 
             }
             //Takes the inverse transform
             //forwardFFT.performRealOnlyInverseTransform(fftComplex.data());
 
             //Inverse shift the data so it's centered again
-           // circularShift(fftComplex, s_win, s_win / 2);
+            circularShift(fftComplex, s_win, s_win / 2);
 
             //Update the Circular buffer with data
             updateCircBuffer(fftComplex, s_win,channel);
 
             //Copy Data starting from one hop size 
-            updateOutputBuffer(buffer, window * s_hop, s_hop, channel);
+            updateOutputBuffer(bufferData, window * s_hop, s_hop, channel);
 
 
             // ..do something to the data...
