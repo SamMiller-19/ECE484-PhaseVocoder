@@ -106,8 +106,8 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
 
 
     //Output data is twice the size since it has real and comples
-    fftComplex.resize(s_fft);
-    std::fill(fftComplex.begin(), fftComplex.end(), 0);
+    fftmagnitude.resize(s_fft);
+    std::fill(fftmagnitude.begin(), fftmagnitude.end(), 0);
 
     
 
@@ -156,6 +156,20 @@ void ECE484PhaseVocoderAudioProcessor::copyBuffertoVector(juce::AudioBuffer<floa
 
 }
 
+
+//Update a set number of samples from the circular buffer. Note we update half a buffer back in time because we need to make sure all the phase vocoder data is there
+void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& buffer, int outputStart, int numSamples, int channel) {
+
+    auto* outputData = buffer.getWritePointer(channel);
+    int s_output_size = buffer.getNumSamples();
+
+
+    for (int i = 0; i < numSamples; i++) {
+        outputData[i + outputStart] = Window[i + windowStart] + outputData[i + outputStart];
+    }
+
+}
+
 void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size) {
     for (int i = 0; i < size; i++) {
         //multiply each index by it's sinusoidal equivilaent
@@ -178,68 +192,32 @@ void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector,
     }
 }
 
-//Update the buffer by filling it with the full size of the vector
-void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(float* input, int inputStart, int inputEnd, juce::AudioBuffer<float>& circBuffer, int& writePosition, int channel) {
+//Convert real vector to vector of complex numbers
+std::vector<std::complex<float>> realToComplex(std::vector<float> Real) {
+    std::vector<std::complex<float>> Complex;
+    Complex.resize(Real.size());
 
-    //i is only used to itterate the vector write posisiton is used for the buffer
-    auto* circData = circBuffer.getWritePointer(channel);
-    int s_circBuffer = circBuffer.getNumSamples();
-    //The way we have this set up the first half of the data is overlapping with past data, the second half of the data
-    //Shouldn't overlap anything and will be overlapped by future data. As such they should be treated differently
-
-
-    for (int i = inputStart; i <inputEnd ; i++) {
-        //Update the write posisiton
-        writePosition++;
-        if (writePosition >= s_circBuffer) {
-            writePosition = 0;
-        }
-        //Add the vector to what's already in that write position
-
-        circData[writePosition] = input[i];
-
+    for (int i = 0; i < Real.size(); i++) {
+        Complex[i].real(Real[i]);
 
     }
-   
+    return Complex;
 
 }
 
-void ECE484PhaseVocoderAudioProcessor::addCircBuffer(float* input, int inputStart, int inputEnd, juce::AudioBuffer<float>& circBuffer, int& writePosition, int channel) {
+std::vector<float> complexToReal(std::vector<std::complex<float>> Complex) {
 
-    //i is only used to itterate the vector write posisiton is used for the buffer
-    auto* circData = circBuffer.getWritePointer(channel);
-    int s_circBuffer = circBuffer.getNumSamples();
-    //The way we have this set up the first half of the data is overlapping with past data, the second half of the data
-    //Shouldn't overlap anything and will be overlapped by future data. As such they should be treated differently
+    std::vector<float> Real;
+    Real.resize(Complex.size());
 
-
-    for (int i = inputStart; i < inputEnd; i++) {
-        //Update the write posisiton
-        writePosition++;
-        if (writePosition >= s_circBuffer) {
-            writePosition = 0;
-        }
-        //Add the vector to what's already in that write position
-
-        circData[writePosition] += input[i];
-
+    for (int i = 0; i < Real.size(); i++) {
+        Real[i] = abs(Complex[i]);
 
     }
-
-
-}
-//Update a set number of samples from the circular buffer. Note we update half a buffer back in time because we need to make sure all the phase vocoder data is there
-void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& buffer, int outputStart,  int numSamples, int channel) {
-    
-    auto* outputData = buffer.getWritePointer(channel);
-    int s_output_size = buffer.getNumSamples();
-    
-
-    for (int i = 0; i < numSamples; i++) {
-        outputData[i + outputStart] = Window[i + windowStart]+ outputData[i + outputStart];
-    }
+    return Real;
 
 }
+
 
 void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
@@ -291,27 +269,28 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
         //Now we itterate through window
         while (window * s_hop < (s_IOBuf + bufferSize) / 2) {
 
-            copyBuffertoVector(inputBuffer,window*s_hop,fftComplex,0,s_win,channel);
+            copyBuffertoVector(inputBuffer,window*s_hop,fftmagnitude,0,s_win,channel);
             //Copy a window worth of data into the window data from the buffer
                 
             //apply the hann windowing
-            hannWindow(fftComplex, s_win);
+            hannWindow(fftmagnitude, s_win);
 
             //shift data to the left, this is to ensure phase is flat
-            circularShift(fftComplex, s_win, s_win / 2);
+           // circularShift(fftmagnitude, s_win, s_win / 2);
 
 
             //Now we perform the FFT on the data stored in same location
-            forwardFFT.performFrequencyOnlyForwardTransform(fftComplex.data());
+            //Now 
+            //std::vector<std::complex<float>>fftComplex = realToComplex(fftmagnitude);
+
+            forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
             //Now we go through each bin and do frequency processing
-            for (int bin = 0; bin < s_win; bin++) {
-                //Put the 2 values into a complex constructor so it's easier to modify
-                std::complex<float> complexData (fftComplex[2*bin], fftComplex[2*bin+1]);
+            for (int bin = 0; bin < s_bin; bin++) {
+                std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
 
-                //Find the phase and magnitude
-                float angle = arg(complexData);
-                float magnitude = abs(complexData);
+                float angle = arg(fftComplex);
+                float magnitude = abs(fftComplex);
 
 
                 //Do processing right now this is robotization
@@ -322,32 +301,34 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 /*------------------------TODO Processing--------------------------*/
 
                 //Convert back to complex number
-                //complexData = std::polar(magnitude, angle);
+                fftComplex = std::polar(magnitude, angle);
 
-                //Store back into the original vector
-                fftComplex[2 * bin] = complexData.real();
-                fftComplex[2 * bin + 1] = complexData.imag();
+                fftmagnitude[2 * bin] = fftComplex.real();
+                fftmagnitude[2 * bin+1] = fftComplex.imag();
+
 
             }
                 //Takes the inverse transform
-                forwardFFT.performRealOnlyInverseTransform(fftComplex.data());
+                forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
+
+                //fftmagnitude = complexToReal(fftComplex);
 
                 //Inverse shift the data so it's centered again
-                circularShift(fftComplex, s_win, s_win / 2);
+                //circularShift(fftmagnitude, s_win, s_win / 2);
 
                 //Update the Circular buffer with 
                 //Copy window data back into the output buffer
                 
 
-            outputBuffer.addFromWithRamp(channel, window * s_hop, fftComplex.data(), s_win, divfactor, divfactor);
+            outputBuffer.addFromWithRamp(channel, window * s_hop, fftmagnitude.data(), s_win, ftfactor, ftfactor);
             /*if (window*s_hop - numSamples > 0 && window*s_hop - numSamples +s_win< numSamples) {
-                buffer.copyFromWithRamp(channel, window * s_hop - numSamples, fftComplex.data(), s_win, 1.0f, 1.0f);
+                buffer.copyFromWithRamp(channel, window * s_hop - numSamples, fftmagnitude.data(), s_win, 1.0f, 1.0f);
             }*/
             //This condition is for if the window goes out of the sample range
             //else{
             //    winWritten = (s_hop * window + s_win)- numSamples;
 
-            //    copyAudiotoVector(bufferData, fftComplex, 0, winWritten);
+            //    copyAudiotoVector(bufferData, fftmagnitude, 0, winWritten);
 
             //    //If not just update the normal amount from the output buffer
             //    if (s_hop * window + s_hop <= numSamples) {

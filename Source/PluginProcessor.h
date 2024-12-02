@@ -86,10 +86,10 @@ private:
 
 
     //Initialize hop and window size
-    const int s_win{ 64 };
+    const int s_win{ 128 };
     const int s_hop{ s_win/8 };
 
-    const float divfactor = s_win / (s_hop * 2);
+    const float ftfactor = s_hop * 2.0 / s_win;
 
     //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
     const int s_fft{ 2 * s_win };
@@ -103,7 +103,7 @@ private:
 
 
     //Initialize vectors for FFT data, we get this to be a 1x2 vector to start resize # rows according to FFT size later
-    std::vector<float> fftComplex;
+    std::vector<float> fftmagnitude;
     //Tracks how much has already been written to the window this output
     int winWritten{ 0 };
     //Tracks how much has already been written to the buffer this output
@@ -120,12 +120,6 @@ private:
 
     //Circular shift data of size by shift t
     void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector, int size, unsigned int shift);
-
-    //Update Circular buffer from provided data
-    void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(float* input, int inputStart, int inputEnd, juce::AudioBuffer<float>& circBuffer, int& writePosition, int channel);
-
-    //Add data to circular buffer at read locations
-    void ECE484PhaseVocoderAudioProcessor::addCircBuffer(float* input, int inputStart, int inputEnd, juce::AudioBuffer<float>& circBuffer, int& writePosition, int channel);
 
     //Update an output buffer with the circular buffer starting at the read position
     void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& outputBuffer, int outputStart, int numSamples, int channel);
