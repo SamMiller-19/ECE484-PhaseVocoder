@@ -276,7 +276,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             hannWindow(fftmagnitude, s_win);
 
             //shift data to the left, this is to ensure phase is flat
-           // circularShift(fftmagnitude, s_win, s_win / 2);
+            circularShift(fftmagnitude, s_win, s_win / 2);
 
 
             //Now we perform the FFT on the data stored in same location
@@ -286,7 +286,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
             //Now we go through each bin and do frequency processing
-            for (int bin = 0; bin < s_bin; bin++) {
+            for (int bin = 0; bin < s_fft/2; bin++) {
                 std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
 
                 float angle = arg(fftComplex);
@@ -296,7 +296,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 //Do processing right now this is robotization
 
                 /* ------------------------TODO Processing--------------------------*/
-                angle = 0;
+                //angle = 0;
 
                 /*------------------------TODO Processing--------------------------*/
 
@@ -314,7 +314,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 //fftmagnitude = complexToReal(fftComplex);
 
                 //Inverse shift the data so it's centered again
-                //circularShift(fftmagnitude, s_win, s_win / 2);
+                circularShift(fftmagnitude, s_win, s_win / 2);
 
                 //Update the Circular buffer with 
                 //Copy window data back into the output buffer
