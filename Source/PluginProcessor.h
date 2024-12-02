@@ -77,25 +77,19 @@ private:
   
 
     //Initialize another vector for the FFT data of each window
-    juce::AudioBuffer<float>  outputBuffer;
-    int outWritePosition{ 0 };
-    int outReadPosition{ 0 }; 
 
-    juce::AudioBuffer<float> inputBuffer;
 
-    //Initialize vectors for FFT data, we get this to be a 1x2 vector to start resize # rows according to FFT size later
-    std::vector<float> fftComplex;
-    //Tracks how much has already been written to the window this output
-    int winWritten{ 0 };
-    //Tracks how much has already been written to the buffer this output
-    int outWritten{ 0 };
+
+
+
+  
 
 
     //Initialize hop and window size
     const int s_win{ 64 };
-    const int s_hop{ 32 };
+    const int s_hop{ s_win/8 };
 
-    const int divfactor = s_win / (s_hop * 2);
+    const float divfactor = s_win / (s_hop * 2);
 
     //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
     const int s_fft{ 2 * s_win };
@@ -103,12 +97,23 @@ private:
     //Initialize an FFT object
     juce::dsp::FFT forwardFFT{(int)log2(s_win)};
 
+
+    juce::AudioBuffer<float> inputBuffer;
+    int s_IOBuf = 2*s_win;
+
+
+    //Initialize vectors for FFT data, we get this to be a 1x2 vector to start resize # rows according to FFT size later
+    std::vector<float> fftComplex;
+    //Tracks how much has already been written to the window this output
+    int winWritten{ 0 };
+    //Tracks how much has already been written to the buffer this output
+    int outWritten{ 0 };
     //User Defined functions
 
 
     
     //Copy audio buffer into a vector
-    void ECE484PhaseVocoderAudioProcessor::copyBuffertoVector(juce::AudioBuffer<float>& buffer, int bufStart, std::vector<float> Vector, int vecStart, int numSamples, int channel);
+    void ECE484PhaseVocoderAudioProcessor::copyBuffertoVector(juce::AudioBuffer<float>& buffer, int bufStart, std::vector<float>& Vector, int vecStart, int numSamples, int channel);
 
     //Hann window a vector of data
     void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size);
@@ -123,7 +128,7 @@ private:
     void ECE484PhaseVocoderAudioProcessor::addCircBuffer(float* input, int inputStart, int inputEnd, juce::AudioBuffer<float>& circBuffer, int& writePosition, int channel);
 
     //Update an output buffer with the circular buffer starting at the read position
-    void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float> Window, int windowStart, juce::AudioBuffer<float>& outputBuffer, int outputStart, int numSamples, int channel);
+    void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& outputBuffer, int outputStart, int numSamples, int channel);
 
 
 
