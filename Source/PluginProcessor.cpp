@@ -98,16 +98,23 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
 
     //Initialize some information about the playback
     //Window Size
-    s_IOBuf = 2*s_win + samplesPerBlock;
-
+    //We set this to be an arbitrarily large number as the sampleRate can change
+    //And we don't want to resize our buffers
+    s_IOBuf = sampleRate;
+    // = 0.25 * sampleRate;
 
     inputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
     inputBuffer.clear();
 
+    outputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
+    outputBuffer.clear();
+
+    //Make the output write position a full sample ahead of the input write position
+    //This ensures that we have lots of time to process the audio
+    outRead = s_IOBuf/2;
 
     //Output data is twice the size since it has real and comples
-    fftmagnitude.resize(s_fft);
-    std::fill(fftmagnitude.begin(), fftmagnitude.end(), 0);
+
 
     
 
@@ -171,10 +178,15 @@ void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Wi
 }
 
 void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size) {
-    for (int i = 0; i < size; i++) {
-        //multiply each index by it's sinusoidal equivilaent
-        Vector[i] = Vector[i] * 0.5 * (1 - cos(i * 2 * 3.1415) / size);
+    unsigned long i;
+    double phase = 0, delta;
 
+    delta = 2.0f * M_PI / (double)size;
+
+    for (i = 0; i < size; i++)
+    { 
+        Vector[i] = Vector[i] * (float)(0.5 * (1.0 - cos(phase)));
+        phase += delta;
     }
 
 }
@@ -218,6 +230,84 @@ std::vector<float> complexToReal(std::vector<std::complex<float>> Complex) {
 
 }
 
+void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int writePosition, int channel) {
+
+    int circBufferSize = circBuffer.getNumSamples();
+
+    if (writePosition + numSamples < circBufferSize) {
+        circBuffer.copyFrom(channel, writePosition, Data, numSamples);
+    }
+    else {
+        int toEnd = circBufferSize - writePosition;
+        int fromStart = numSamples - toEnd;
+        circBuffer.copyFrom(channel, writePosition, Data, toEnd);
+        circBuffer.copyFrom(channel, 0, Data+toEnd, fromStart);
+    }
+
+}
+
+void ECE484PhaseVocoderAudioProcessor::addToCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int writePosition, int channel,float gain) {
+
+    int circBufferSize = circBuffer.getNumSamples();
+
+    if (writePosition + numSamples < circBufferSize) {
+        circBuffer.addFrom(channel, writePosition, Data, numSamples,gain);
+    }
+    else {
+        int toEnd = circBufferSize - writePosition;
+        int fromStart = numSamples - toEnd;
+        circBuffer.addFrom(channel, writePosition, Data, toEnd,gain);
+        circBuffer.addFrom(channel, 0, Data + toEnd, fromStart,gain);
+    }
+
+}
+void ECE484PhaseVocoderAudioProcessor::clearCircBuffer(juce::AudioBuffer<float>& circBuffer,int numSamples, int writePosition, int channel) {
+
+    int circBufferSize = circBuffer.getNumSamples();
+
+    if (writePosition + numSamples < circBufferSize) {
+        circBuffer.clear(channel,writePosition,numSamples);
+    }
+    else {
+        int toEnd = circBufferSize - writePosition;
+        int fromStart = numSamples - toEnd;
+        circBuffer.clear(channel, writePosition, toEnd);
+        circBuffer.clear(channel, 0, fromStart);
+    }
+
+}
+
+void ECE484PhaseVocoderAudioProcessor::updateFromCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int readPosition, int channel) {
+
+    int circBufferSize = circBuffer.getNumSamples();
+    auto* circBufferData = circBuffer.getWritePointer(channel);
+
+    for (int i = 0; i < numSamples; i++) {
+        Data[i] = circBufferData[readPosition];
+        readPosition++;
+        if (readPosition >= circBufferSize)
+            readPosition = 0;
+
+    }
+
+}
+
+void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increment, unsigned int size) {
+    index += increment;
+    if (index > size) {
+        index %= size;
+    }
+    else if (index < 0) {
+        while (index < 0) {
+            index += size;
+        }
+            
+        
+    }
+
+}
+
+
 
 void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
@@ -226,13 +316,22 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     auto totalNumOutputChannels = getTotalNumOutputChannels();
     
     int numSamples = buffer.getNumSamples();
-    s_IOBuf = 2*s_win + numSamples;
+    int inputSamples = inputBuffer.getNumSamples();
+    int outputSamples = outputBuffer.getNumSamples();
+
+    //Initialize the FFT processing vector
+    std::vector<float> fftmagnitude;
+
+    fftmagnitude.resize(s_fft);
+    std::fill(fftmagnitude.begin(), fftmagnitude.end(), 0);
+    //s_IOBuf = 2*s_win + numSamples;
+
+    //inputBuffer.setSize(totalNumInputChannels, s_IOBuf);
+    //outputBuffer.setSize(totalNumInputChannels, s_IOBuf);
     
 
     //Create the output buffer
-    juce::AudioBuffer<float>  outputBuffer;
-    outputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
-    outputBuffer.clear();
+
 
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, numSamples);
@@ -250,26 +349,52 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     //Overlap and add 
     
      //Itterate through each window 
+
+    //Copy the input buffer into a temporary value
+    //juce::AudioBuffer<float> temp = inputBuffer;
     for (int channel = 0; channel < totalNumInputChannels; ++channel){
+        //We can use this to check how many samples didn't get picked up in the last window
+
+
+        int unwindowedSamples = inWrite-inRead;
+        if(unwindowedSamples <0)
+            unwindowedSamples +=inputSamples;
+
+
         auto* bufferData = buffer.getWritePointer(channel);
-        int bufferSize = buffer.getNumSamples();
+        auto* outputData = outputBuffer.getWritePointer(channel);
 
-        //Shift the data down by one buffer size, contains a total of 3 buffers, the center buffer is the one we operate on
-        juce::AudioBuffer<float> copy = inputBuffer;
-        inputBuffer.copyFrom(channel,0, copy, channel, bufferSize,s_IOBuf-bufferSize);
+        updateCircBuffer(bufferData,numSamples,inputBuffer,inWrite,channel);
+        //If we're on the last itteration update th buffer index
+        
+        updateBufferIndex(inWrite, numSamples, inputSamples);
 
-        //Copy the inputBuffer in from the input data
-        inputBuffer.copyFrom(channel, s_IOBuf  - bufferSize, buffer, channel, 0, bufferSize);
+        //inputBuffer.copyFrom(channel,0, temp, channel, numSamples,s_IOBuf-numSamples);
+
+        ////Copy the inputBuffer in from the input data
+        //
+        //inputBuffer.copyFrom(channel, s_IOBuf  - numSamples, buffer, channel, 0, numSamples);
+
+        ////Do the same for the output buffer
+        //temp = outputBuffer;
+        //outputBuffer.copyFrom(channel, 0, temp, channel, numSamples, s_IOBuf - numSamples);
+
+        ////Clear the end of the buffer so that new data can be added on top
+        //outputBuffer.clear(channel, s_IOBuf - numSamples,numSamples);
+
+
+
 
         
-        //we want to start where the window doesn't reach into the middle of the three windows at all
-        int window;
-        for (window = 0; window * s_hop + s_win < (s_IOBuf - bufferSize) / 2; window++);
+       //Now we itterate through window and perform fft on all complete windows we use the unwindowed samples variable
+        //To ensure we start far enough back
+        int samples;
+        for (samples = 0; samples - unwindowedSamples + s_win < numSamples;samples+=s_hop) {
 
-        //Now we itterate through window
-        while (window * s_hop < (s_IOBuf + bufferSize) / 2) {
-
-            copyBuffertoVector(inputBuffer,window*s_hop,fftmagnitude,0,s_win,channel);
+            updateFromCircBuffer(fftmagnitude.data(),s_win,inputBuffer,inRead, channel);
+            // Update the buffer to reflect the start of the window you're reading
+            
+            updateBufferIndex(inRead, s_hop, inputSamples);
             //Copy a window worth of data into the window data from the buffer
                 
             //apply the hann windowing
@@ -293,14 +418,14 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 float magnitude = abs(fftComplex);
 
 
-                //Do processing right now this is robotization
+                ////Do processing right now this is robotization
 
-                /* ------------------------TODO Processing--------------------------*/
-                //angle = 0;
+                ///* ------------------------TODO Processing--------------------------*/
+                angle = 0;
 
-                /*------------------------TODO Processing--------------------------*/
+                ///*------------------------TODO Processing--------------------------*/
 
-                //Convert back to complex number
+                ////Convert back to complex number
                 fftComplex = std::polar(magnitude, angle);
 
                 fftmagnitude[2 * bin] = fftComplex.real();
@@ -308,49 +433,49 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
 
             }
-                //Takes the inverse transform
-                forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
+            //Takes the inverse transform
+            forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
 
-                //fftmagnitude = complexToReal(fftComplex);
+            //Inverse shift the data so it's centered again
+            circularShift(fftmagnitude, s_win, s_win / 2);
 
-                //Inverse shift the data so it's centered again
-                circularShift(fftmagnitude, s_win, s_win / 2);
-
-                //Update the Circular buffer with 
-                //Copy window data back into the output buffer
+            //Update the Circular buffer with 
+            //Copy window data back into the output buffer
                 
 
-            outputBuffer.addFromWithRamp(channel, window * s_hop, fftmagnitude.data(), s_win, ftfactor, ftfactor);
-            /*if (window*s_hop - numSamples > 0 && window*s_hop - numSamples +s_win< numSamples) {
-                buffer.copyFromWithRamp(channel, window * s_hop - numSamples, fftmagnitude.data(), s_win, 1.0f, 1.0f);
-            }*/
-            //This condition is for if the window goes out of the sample range
-            //else{
-            //    winWritten = (s_hop * window + s_win)- numSamples;
-
-            //    copyAudiotoVector(bufferData, fftmagnitude, 0, winWritten);
-
-            //    //If not just update the normal amount from the output buffer
-            //    if (s_hop * window + s_hop <= numSamples) {
-            //        updateOutputBuffer(buffer, window * s_hop, s_hop - outWritten, channel);
-            //        outWritten = 0;
-
-            //    }
-            //    else {
-            //        outWritten = (s_hop * window + s_hop) - numSamples;
-            //        updateOutputBuffer(buffer, window * s_hop, outWritten, channel);
-            //    }
-
-            //    
-
-            //}
-            window++;
+            addToCircBuffer(fftmagnitude.data(), s_win, outputBuffer, outWrite, channel, ftfactor);
             
-        }
+            updateBufferIndex(outWrite, s_hop, outputSamples);
 
-        buffer.copyFrom(channel, 0, outputBuffer, channel, (s_IOBuf - bufferSize) / 2, bufferSize);
+            
+
+        }
         
+        //After this, we want to reset the 
+        //    
+        //}
+        //copy from the middle of the sample since this guarantees all the FFTs have been completed
+        updateFromCircBuffer(bufferData, numSamples, outputBuffer, outRead, channel);
+        clearCircBuffer(outputBuffer, numSamples,outRead,channel);
+        //Update the out read buffer
+        
+        updateBufferIndex(outRead, numSamples, outputSamples);
+
+        //Decrement the IO Index by a numSamples so that it reflects the fact that the correct amount of data has been moved
+        //IOIndex -= numSamples;
+
+        //If we're not on our last channel we want to reset the samples
+        if (channel < totalNumInputChannels - 1) {
+            updateBufferIndex(outRead, -numSamples, outputSamples);
+            updateBufferIndex(outWrite, -samples, outputSamples);
+            updateBufferIndex(inRead, -samples, inputSamples);
+            updateBufferIndex(inWrite, -numSamples, inputSamples);
+        }
     }
+
+    //Update read and write positions after all is said and done
+
+
 }
 
 //==============================================================================

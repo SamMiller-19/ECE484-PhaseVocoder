@@ -9,6 +9,10 @@
 #pragma once
 
 #include <JuceHeader.h>
+#ifndef M_PI
+    #define M_PI 3.14159267
+#endif
+
 
 enum {
     Shift=0,
@@ -87,7 +91,7 @@ private:
 
     //Initialize hop and window size
     const int s_win{ 1028 };
-    const int s_hop{ s_win/8 };
+    const int s_hop{ s_win/4 };
 
     const float ftfactor = s_hop * 2.0 / s_win;
 
@@ -99,16 +103,16 @@ private:
 
 
     juce::AudioBuffer<float> inputBuffer;
-    int s_IOBuf = 2*s_win;
+    int inWrite{ 0 };
+    int inRead{ 0 };
 
+    juce::AudioBuffer<float>  outputBuffer;
+    int outWrite{ 0 };
+    int outRead{ 0 };
 
-    //Initialize vectors for FFT data, we get this to be a 1x2 vector to start resize # rows according to FFT size later
-    std::vector<float> fftmagnitude;
-    //Tracks how much has already been written to the window this output
-    int winWritten{ 0 };
-    //Tracks how much has already been written to the buffer this output
-    int outWritten{ 0 };
-    //User Defined functions
+    int s_IOBuf{ 2 * s_win };
+
+    int startLastWindow;
 
 
     
@@ -124,6 +128,11 @@ private:
     //Update an output buffer with the circular buffer starting at the read position
     void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& outputBuffer, int outputStart, int numSamples, int channel);
 
+    void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int writePosition, int channel);
+    void ECE484PhaseVocoderAudioProcessor::updateFromCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int readPosition, int channel);    
+    void ECE484PhaseVocoderAudioProcessor::addToCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int writePosition, int channel, float gain);
+    void ECE484PhaseVocoderAudioProcessor::clearCircBuffer(juce::AudioBuffer<float>& circBuffer, int numSamples, int writePosition, int channel);
 
+    void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increment, unsigned int size);
 
 };
