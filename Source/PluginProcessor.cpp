@@ -100,7 +100,7 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     //Window Size
     //We set this to be an arbitrarily large number as the sampleRate can change
     //And we don't want to resize our buffers
-    s_IOBuf = sampleRate;
+    s_IOBuf = samplesPerBlock+2*s_win;
     // = 0.25 * sampleRate;
 
     inputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
@@ -421,7 +421,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
                 ////Do processing right now this is robotization
 
                 ///* ------------------------TODO Processing--------------------------*/
-                angle = 0;
+                //angle = 0;
 
                 ///*------------------------TODO Processing--------------------------*/
 

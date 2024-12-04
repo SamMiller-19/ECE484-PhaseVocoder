@@ -90,7 +90,7 @@ private:
 
 
     //Initialize hop and window size
-    const int s_win{ 1028 };
+    const int s_win{ 128 };
     const int s_hop{ s_win/4 };
 
     const float ftfactor = s_hop * 2.0 / s_win;
