@@ -100,7 +100,7 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     //Window Size
     //We set this to be an arbitrarily large number as the sampleRate can change
     //And we don't want to resize our buffers
-    s_IOBuf = samplesPerBlock+2*s_win;
+    s_IOBuf = 2*s_win+samplesPerBlock;
     // = 0.25 * sampleRate;
 
     inputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
@@ -111,10 +111,17 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
 
     //Make the output write position a full sample ahead of the input write position
     //This ensures that we have lots of time to process the audio
-    outRead = s_IOBuf/2;
+    inWrite = 0;
+    outWrite = 0;
+    inRead = 0;
+
+    outRead = inWrite-s_win;
+    if (outRead < 0) {
+        outRead += s_IOBuf;
+    }
 
     //Output data is twice the size since it has real and comples
-
+     
 
     
 
@@ -294,16 +301,16 @@ void ECE484PhaseVocoderAudioProcessor::updateFromCircBuffer(float* Data, int num
 
 void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increment, unsigned int size) {
     index += increment;
-    if (index > size) {
-        index %= size;
+    while (index > (int)size) {
+        index -= size;
     }
-    else if (index < 0) {
-        while (index < 0) {
-            index += size;
-        }
+    
+    while (index < 0) {
+        index += size;
+    }
             
         
-    }
+    
 
 }
 
@@ -311,6 +318,8 @@ void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increme
 
 void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    
+    
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
@@ -319,6 +328,9 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     int inputSamples = inputBuffer.getNumSamples();
     int outputSamples = outputBuffer.getNumSamples();
 
+
+   // outRead = inWrite - s_win;
+    updateBufferIndex(outRead, 0, outputSamples);
     //Initialize the FFT processing vector
     std::vector<float> fftmagnitude;
 
@@ -388,8 +400,8 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
         
        //Now we itterate through window and perform fft on all complete windows we use the unwindowed samples variable
         //To ensure we start far enough back
-        int samples;
-        for (samples = 0; samples - unwindowedSamples + s_win < numSamples;samples+=s_hop) {
+        int samples=0;
+        for (samples=0; samples - unwindowedSamples + s_win < numSamples;samples+=s_hop) {
 
             updateFromCircBuffer(fftmagnitude.data(),s_win,inputBuffer,inRead, channel);
             // Update the buffer to reflect the start of the window you're reading
@@ -401,43 +413,43 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             hannWindow(fftmagnitude, s_win);
 
             //shift data to the left, this is to ensure phase is flat
-            circularShift(fftmagnitude, s_win, s_win / 2);
+            //circularShift(fftmagnitude, s_win, s_win / 2);
 
 
             //Now we perform the FFT on the data stored in same location
             //Now 
             //std::vector<std::complex<float>>fftComplex = realToComplex(fftmagnitude);
 
-            forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
+            //forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
-            //Now we go through each bin and do frequency processing
-            for (int bin = 0; bin < s_fft/2; bin++) {
-                std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
+            ////Now we go through each bin and do frequency processing
+            //for (int bin = 0; bin < s_fft/2; bin++) {
+            //    std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
 
-                float angle = arg(fftComplex);
-                float magnitude = abs(fftComplex);
-
-
-                ////Do processing right now this is robotization
-
-                ///* ------------------------TODO Processing--------------------------*/
-                //angle = 0;
-
-                ///*------------------------TODO Processing--------------------------*/
-
-                ////Convert back to complex number
-                fftComplex = std::polar(magnitude, angle);
-
-                fftmagnitude[2 * bin] = fftComplex.real();
-                fftmagnitude[2 * bin+1] = fftComplex.imag();
+            //    float angle = arg(fftComplex);
+            //    float magnitude = abs(fftComplex);
 
 
-            }
-            //Takes the inverse transform
-            forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
+            //    ////Do proces sing right now this is robotization
 
-            //Inverse shift the data so it's centered again
-            circularShift(fftmagnitude, s_win, s_win / 2);
+            //    ///* ------------------------TODO Processing--------------------------*/
+            //    //angle = 0;
+
+            //    ///*------------------------TODO Processing--------------------------*/
+
+            //    ////Convert back to complex number
+            //    fftComplex = std::polar(magnitude, angle);
+
+            //    fftmagnitude[2 * bin] = fftComplex.real();
+            //    fftmagnitude[2 * bin+1] = fftComplex.imag();
+
+
+            //}
+            ////Takes the inverse transform
+           // forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
+
+           // //Inverse shift the data so it's centered again
+           //circularShift(fftmagnitude, s_win, s_win / 2);
 
             //Update the Circular buffer with 
             //Copy window data back into the output buffer

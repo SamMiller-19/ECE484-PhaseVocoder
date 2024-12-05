@@ -90,8 +90,8 @@ private:
 
 
     //Initialize hop and window size
-    const int s_win{ 128 };
-    const int s_hop{ s_win/4 };
+    const int s_win{ 1028 };
+    const int s_hop{ s_win/2 };
 
     const float ftfactor = s_hop * 2.0 / s_win;
 
@@ -103,12 +103,12 @@ private:
 
 
     juce::AudioBuffer<float> inputBuffer;
-    int inWrite{ 0 };
-    int inRead{ 0 };
+    int inWrite = 0;
+    int inRead= 0;
 
     juce::AudioBuffer<float>  outputBuffer;
-    int outWrite{ 0 };
-    int outRead{ 0 };
+    int outWrite= 0 ;
+    int outRead=0 ;
 
     int s_IOBuf{ 2 * s_win };
 
