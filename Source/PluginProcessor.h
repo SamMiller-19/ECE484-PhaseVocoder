@@ -115,6 +115,9 @@ private:
     //Circular shift data of size by shift t
     void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector, int size, unsigned int shift);
 
+    //Using interpolation time stretch a window to it's stretch size
+    std::vector<float> ECE484PhaseVocoderAudioProcessor::compressWindow(std::vector<float>& originalWindow, float stretch);
+
     /*****************************************************Freq domain Processing ****************************************************/
     //Take single complex sample input and apply robotization
     std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobitization(std::complex<float> input);

@@ -340,14 +340,14 @@ float princArg(float phase) {
 
 }
 
-std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<float> input, float pitchShift, float& phaseBefore, float& phaseAfter, int hopSize, int bin, int s_win){
+std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<float> input, float pitchShift, float& phaseBefore, float& phaseAfter, int an_hop, int bin, int s_win){
     float unwrappedPhase = arg(input);
     float magnitude = abs(input);
 
     //Calculate the frequency in per samples
     float frequency = 2.0f * M_PI * (float)bin / (float)s_win;
     //Calculate omega in time
-    float Omega = frequency * (float)hopSize;
+    float Omega = frequency * (float)an_hop;
 
     //Calculate the difference between the phases
     float dPhi = unwrappedPhase - phaseBefore;
@@ -360,12 +360,36 @@ std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<
 
     //Multiply the phase by the pitchshift to find the modified phase
 
-    phaseAfter=princArg(phaseAfter+delPhi*(1+pitchShift));
+    phaseAfter=princArg(phaseAfter+delPhi*pitchShift);
 
     //Now we just convert back to a complex number and return it
     return std::polar(magnitude, phaseAfter);
-
 }
+std::vector<float> ECE484PhaseVocoderAudioProcessor::compressWindow(std::vector<float>& originalWindow, float compress) {
+    int s_win = originalWindow.size();
+    int s_win_compress = floor(s_win / compress);
+
+    std::vector<float> outputVector;
+
+    outputVector.resize(s_win_compress);
+
+    float in_i;
+    int whole_i;
+    float frac_i;
+
+
+    
+    for (int out_i = 0; out_i < s_win_compress;out_i++ ) {
+        in_i = out_i * compress;
+        whole_i = floor(in_i);
+        frac_i = in_i - (float)whole_i;
+
+        outputVector[out_i] = (1 - frac_i) * originalWindow[whole_i] + frac_i * originalWindow[(whole_i+1)%s_win];
+
+    }
+    return outputVector;
+}
+
 
 void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
@@ -387,6 +411,13 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     Pluginsettings currentSettings = getPluginSettings(layout);
 
     //Set this factor so we scale based on the values
+    int hop_syn = currentSettings.s_hop;
+    int hop_an = hop_syn;
+    if (currentSettings.effect == Shift) {
+        hop_an = round(hop_syn /(1+ currentSettings.pitchShift));
+    }
+    float trueShift = (float)hop_syn / hop_an;
+
     
     float ftfactor = currentSettings.s_hop * 2.0 / currentSettings. s_win;
 
@@ -400,6 +431,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     std::vector<float> fftmagnitude;
     fftmagnitude.resize(s_fft);
     std::fill(fftmagnitude.begin(), fftmagnitude.end(), 0);
+
 
     //Modify the size of the last phase vector so that it has all the relavent information
 
@@ -447,11 +479,15 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
        //Now we itterate through window and perform fft on all complete windows we use the unwindowed samples variable
        //To ensure we start far enough back
         int samples;
-        for (samples=0; samples - unwindowedSamples + currentSettings.s_win < numSamples;samples+=currentSettings.s_hop) {
+        for (samples=0; samples - unwindowedSamples + currentSettings.s_win < numSamples;samples+=hop_an) {
+            
+            //Need to resize the FFT vector as it may have changed sizes when being resampled
+            fftmagnitude.resize(s_fft);
+
            
             //Copy a window worth of data into the window data from the buffer and update the index
             updateFromCircBuffer(fftmagnitude.data(),currentSettings.s_win,inputBuffer,inRead, channel);          
-            updateBufferIndex(inRead, currentSettings.s_hop, inputSamples);
+            updateBufferIndex(inRead, hop_an, inputSamples);
             
                 
             //apply the hann windowing
@@ -476,7 +512,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
                 switch (currentSettings.effect) {
                 case Shift:
-                    fftComplex = doPitchShift(fftComplex, currentSettings.pitchShift, unmodifiedPhases[bin],modifiedPhases[bin], currentSettings.s_hop, bin, currentSettings.s_win);
+                    fftComplex = doPitchShift(fftComplex, trueShift, unmodifiedPhases[bin],modifiedPhases[bin], hop_an, bin, currentSettings.s_win);
                     break;
 
                 case Robitization:
@@ -498,15 +534,27 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //Takes the inverse FFT
             forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
 
+            //If we're pitch shifting we need to resample the window
+            int size = fftmagnitude.size();
+            
+            if (currentSettings.effect == Shift) {
+                
+
+                fftmagnitude= compressWindow(fftmagnitude, trueShift);
+            }
+            size = fftmagnitude.size();
             //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
             // The one in class
             //circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
 
             //Copy window data back into the output buffer
-            addToCircBuffer(fftmagnitude.data(), currentSettings.s_win, outputBuffer, outWrite, channel, ftfactor);   
-            updateBufferIndex(outWrite, currentSettings.s_hop, outputSamples);
+            addToCircBuffer(fftmagnitude.data(), fftmagnitude.size(), outputBuffer, outWrite, channel, ftfactor);
+            updateBufferIndex(outWrite, hop_an, outputSamples);
         }
         
+        
+       
+
         //Update the output buffer, note that this is placed well after the input buffer so that all processing can take place first
         updateFromCircBuffer(bufferData, numSamples, outputBuffer, outRead, channel);
         //Clear the parts of the buffer that have been read
