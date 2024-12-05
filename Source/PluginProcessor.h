@@ -24,6 +24,8 @@ struct Pluginsettings
 {
     float pitchShift{ 0 };
     int effect{ Shift };
+    int s_win{ 0 };
+    int s_hop{ 0 };
 
 };
 
@@ -90,17 +92,8 @@ private:
 
 
     //Initialize hop and window size
-    const int s_win{ 1028 };
-    const int s_hop{ s_win/2 };
-
-    const float ftfactor = s_hop * 2.0 / s_win;
-
-    //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
-    const int s_fft{ 2 * s_win };
-
-    //Initialize an FFT object
-    juce::dsp::FFT forwardFFT{(int)log2(s_win)};
-
+    const int s_win_max{ 4096 };
+    const int s_hop_max{ 2048 };
 
     juce::AudioBuffer<float> inputBuffer;
     int inWrite = 0;
@@ -109,11 +102,6 @@ private:
     juce::AudioBuffer<float>  outputBuffer;
     int outWrite= 0 ;
     int outRead=0 ;
-
-    int s_IOBuf{ 2 * s_win };
-
-    int startLastWindow;
-
 
     
     /*********************************************************Time DOmain Processing**************************************************/
@@ -131,7 +119,7 @@ private:
     std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input);
 
     //Take single complex sample input and % pitch shift and apply Whisperization
-    std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input, float pPitchShift)
+    std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input, float pPitchShift);
 
 
     /*****************************************************Circular Buffer ****************************************************/

@@ -100,7 +100,7 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     //Window Size
     //We set this to be an arbitrarily large number as the sampleRate can change
     //And we don't want to resize our buffers
-    s_IOBuf = 2*s_win+samplesPerBlock;
+    int s_IOBuf = 2*s_win_max+samplesPerBlock;
     // = 0.25 * sampleRate;
 
     inputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
@@ -115,7 +115,7 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     outWrite = 0;
     inRead = 0;
 
-    outRead = inWrite-s_win;
+    outRead = inWrite-s_win_max;
     if (outRead < 0) {
         outRead += s_IOBuf;
     }
@@ -350,30 +350,37 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     int inputSamples = inputBuffer.getNumSamples();
     int outputSamples = outputBuffer.getNumSamples();
 
-    //Get Current Plugin Settings
-    Pluginsettings currentSettings= getPluginSettings(layout);
 
+
+    
+    //Get Current Plugin Settings
+    Pluginsettings currentSettings = getPluginSettings(layout);
+
+    //Set this factor so we scale based on the values
+    
+    float ftfactor = currentSettings.s_hop * 2.0 / currentSettings. s_win;
+
+    //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
+    const int s_fft{ 2 * currentSettings.s_win };
+
+    //Initialize an FFT object
+    juce::dsp::FFT forwardFFT{ (int)log2(currentSettings.s_win) };
 
     //Initialize the FFT processing vector
     std::vector<float> fftmagnitude;
-
     fftmagnitude.resize(s_fft);
     std::fill(fftmagnitude.begin(), fftmagnitude.end(), 0);
-    //s_IOBuf = 2*s_win + numSamples;
 
-    //inputBuffer.setSize(totalNumInputChannels, s_IOBuf);
-    //outputBuffer.setSize(totalNumInputChannels, s_IOBuf);
+
+
     
-
-    //Create the output buffer
-
-
+    //Clear any unused channels
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, numSamples);
 
     //For each sample we need to
 
-    //1. Shift the input data down by one audio buffer size
+    //1. Shift the input data down by one window size
 
     //2. Window the data starting from any windows that reach into this sample time.
 
@@ -381,52 +388,46 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
     //4. Perform any phase vocoder actions
 
-    //Overlap and add 
+    //5. Overlap and add 
     
-     //Itterate through each window 
-
-    //Copy the input buffer into a temporary value
-    //juce::AudioBuffer<float> temp = inputBuffer;
+    //6. Copy from the overlap and added data back to the audio buffer
+    
     for (int channel = 0; channel < totalNumInputChannels; ++channel){
-        //We can use this to check how many samples didn't get picked up in the last window
 
-
-        int unwindowedSamples = inWrite-inRead;
-        if(unwindowedSamples <0)
-            unwindowedSamples +=inputSamples;
-
-
+        //Get a pointer with the new data
         auto* bufferData = buffer.getWritePointer(channel);
-        auto* outputData = outputBuffer.getWritePointer(channel);
 
-        updateCircBuffer(bufferData,numSamples,inputBuffer,inWrite,channel);
-        //If we're on the last itteration update th buffer index
-        
+
+        //Use this to know how many samples have not yet been processed
+        int unwindowedSamples = inWrite-inRead;
+        //Use this to normalize the index since these are circular indexes which can cause inRead to be larger than inWrite
+
+        updateBufferIndex(unwindowedSamples, 0, inputSamples);
+
+        //Update input Buffer with new data and index
+        updateCircBuffer(bufferData,numSamples,inputBuffer,inWrite,channel);    
         updateBufferIndex(inWrite, numSamples, inputSamples);
-
-
-
 
         
        //Now we itterate through window and perform fft on all complete windows we use the unwindowed samples variable
-        //To ensure we start far enough back
-        int samples=0;
-        for (samples=0; samples - unwindowedSamples + s_win < numSamples;samples+=s_hop) {
-
-            updateFromCircBuffer(fftmagnitude.data(),s_win,inputBuffer,inRead, channel);
-            // Update the buffer to reflect the start of the window you're reading
+       //To ensure we start far enough back
+        int samples;
+        for (samples=0; samples - unwindowedSamples + currentSettings.s_win < numSamples;samples+=currentSettings.s_hop) {
+           
+            //Copy a window worth of data into the window data from the buffer and update the index
+            updateFromCircBuffer(fftmagnitude.data(),currentSettings.s_win,inputBuffer,inRead, channel);          
+            updateBufferIndex(inRead, currentSettings.s_hop, inputSamples);
             
-            updateBufferIndex(inRead, s_hop, inputSamples);
-            //Copy a window worth of data into the window data from the buffer
                 
             //apply the hann windowing
-            hannWindow(fftmagnitude, s_win);
+            hannWindow(fftmagnitude, currentSettings.s_win);
+
 
             //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
             // The one in class
-            //circularShift(fftmagnitude, s_win, s_win / 2);
+            //circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
 
-
+            //Perform the forward FFT
             forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
             //Now we go through each bin and do frequency processing
@@ -455,20 +456,16 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
 
             }
-            //Takes the inverse transform
+            //Takes the inverse FFT
             forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
 
             //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
             // The one in class
-            //circularShift(fftmagnitude, s_win, s_win / 2);
+            //circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
 
             //Copy window data back into the output buffer
-            addToCircBuffer(fftmagnitude.data(), s_win, outputBuffer, outWrite, channel, ftfactor);
-            
-            updateBufferIndex(outWrite, s_hop, outputSamples);
-
-            
-
+            addToCircBuffer(fftmagnitude.data(), currentSettings.s_win, outputBuffer, outWrite, channel, ftfactor);   
+            updateBufferIndex(outWrite, currentSettings.s_hop, outputSamples);
         }
         
         //Update the output buffer, note that this is placed well after the input buffer so that all processing can take place first
@@ -526,8 +523,16 @@ void ECE484PhaseVocoderAudioProcessor::setStateInformation (const void* data, in
 Pluginsettings getPluginSettings(juce::AudioProcessorValueTreeState& layout) {
 
     Pluginsettings settings;
-    settings.pitchShift = layout.getRawParameterValue("Pitch Shift in Semitones")->load();
+    settings.pitchShift = layout.getRawParameterValue("Pitch Shift in %")->load();
     settings.effect = layout.getRawParameterValue("Effect")->load();
+    int hopIndex = layout.getRawParameterValue("Hop Size")->load();
+    int winIndex = layout.getRawParameterValue("Window Size")->load();
+    
+    //Conversion of the hop sizes
+
+    settings.s_hop = 2 << (hopIndex + 2);
+    settings.s_win= 2 << (winIndex + 2);
+    
 
 
     return settings;
@@ -539,13 +544,21 @@ ECE484PhaseVocoderAudioProcessor::createParamaterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
     layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "Pitch Shift in Semitones",
-        "Pitch Shift in Semitones",
+        "Pitch Shift in %",
+        "Pitch Shift in %",
         juce::NormalisableRange<float>(-5.f,5.f,1.f),
         0.0f));
 
-
     juce::StringArray stringArray;
+    for (int power = 2; power < 12; power++) {
+        std::string stringToAdd=std::to_string((2 << power))+" samples";
+        stringArray.add(stringToAdd);
+    }
+
+    layout.add(std::make_unique<juce::AudioParameterChoice>("Hop Size", "Hop Size", stringArray,6));
+    layout.add(std::make_unique<juce::AudioParameterChoice>("Window Size", "Window Size", stringArray, 8));
+
+    stringArray.clear();
     stringArray.add("Pitch Shift");
     stringArray.add("Robitization");
     stringArray.add("Whisperization");
