@@ -420,33 +420,33 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //Now 
             //std::vector<std::complex<float>>fftComplex = realToComplex(fftmagnitude);
 
-            //forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
+            forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
-            ////Now we go through each bin and do frequency processing
-            //for (int bin = 0; bin < s_fft/2; bin++) {
-            //    std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
+            //Now we go through each bin and do frequency processing
+            for (int bin = 0; bin < s_fft/2; bin++) {
+                std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
 
-            //    float angle = arg(fftComplex);
-            //    float magnitude = abs(fftComplex);
-
-
-            //    ////Do proces sing right now this is robotization
-
-            //    ///* ------------------------TODO Processing--------------------------*/
-            //    //angle = 0;
-
-            //    ///*------------------------TODO Processing--------------------------*/
-
-            //    ////Convert back to complex number
-            //    fftComplex = std::polar(magnitude, angle);
-
-            //    fftmagnitude[2 * bin] = fftComplex.real();
-            //    fftmagnitude[2 * bin+1] = fftComplex.imag();
+                float angle = arg(fftComplex);
+                float magnitude = abs(fftComplex);
 
 
-            //}
-            ////Takes the inverse transform
-           // forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
+                ////Do proces sing right now this is robotization
+
+                ///* ------------------------TODO Processing--------------------------*/
+                angle = 0;
+
+                ///*------------------------TODO Processing--------------------------*/
+
+                ////Convert back to complex number
+                fftComplex = std::polar(magnitude, angle);
+
+                fftmagnitude[2 * bin] = fftComplex.real();
+                fftmagnitude[2 * bin+1] = fftComplex.imag();
+
+
+            }
+            //Takes the inverse transform
+            forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
 
            // //Inverse shift the data so it's centered again
            //circularShift(fftmagnitude, s_win, s_win / 2);
