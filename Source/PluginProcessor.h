@@ -103,6 +103,10 @@ private:
     int outWrite= 0 ;
     int outRead=0 ;
 
+    juce::AudioBuffer<float> phaseBefore;
+    
+    juce::AudioBuffer<float> phaseAfter;
+
     
     /*********************************************************Time DOmain Processing**************************************************/
     //Hann window a vector of data
@@ -119,7 +123,7 @@ private:
     std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input);
 
     //Take single complex sample input and % pitch shift and apply Whisperization
-    std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input, float pPitchShift);
+    std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<float> input, float pitchShift, float& phaseBefore, float& phaseAfter, int hopSize, int bin, int s_win);
 
 
     /*****************************************************Circular Buffer ****************************************************/

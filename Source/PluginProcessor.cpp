@@ -109,6 +109,14 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     outputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
     outputBuffer.clear();
 
+    //Set the size of the previous phase info to the max window size
+    phaseBefore.setSize(getTotalNumInputChannels(), s_win_max);
+    phaseBefore.clear();
+
+    phaseAfter.setSize(getTotalNumInputChannels(), s_win_max);
+    phaseAfter.clear();
+
+
     //Make the output write position a full sample ahead of the input write position
     //This ensures that we have lots of time to process the audio
     inWrite = 0;
@@ -320,20 +328,42 @@ std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::comp
     return std::polar(magnitude, angle);
 
 }
+/* Princarg function only really used by do Pitch shift wraps function to -pi to pi*/
+float princArg(float phase) {
+    while (phase > M_PI)
+        phase -= 2 * M_PI;
 
-std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input, float pPitchShift) {
+    while (phase < -M_PI)
+        phase += 2 * M_PI;
 
-    float angle = arg(input);
+    return phase;
+
+}
+
+std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<float> input, float pitchShift, float& phaseBefore, float& phaseAfter, int hopSize, int bin, int s_win){
+    float unwrappedPhase = arg(input);
     float magnitude = abs(input);
 
+    //Calculate the frequency in per samples
+    float frequency = 2.0f * M_PI * (float)bin / (float)s_win;
+    //Calculate omega in time
+    float Omega = frequency * (float)hopSize;
 
-    //take a random value from 0 to 1 
-    float random = juce::Random::getSystemRandom().nextFloat();
+    //Calculate the difference between the phases
+    float dPhi = unwrappedPhase - phaseBefore;
 
-    angle = 2 * M_PI * random;
+    //Calculate the true phase by unwrapping the phase
+    float delPhi = Omega + princArg(dPhi - Omega);
 
-    ////Convert back to complex number
-    return std::polar(magnitude, angle);
+    //Set the lastPhase to this phase
+    phaseBefore = delPhi;
+
+    //Multiply the phase by the pitchshift to find the modified phase
+
+    phaseAfter=princArg(phaseAfter+delPhi*(1+pitchShift));
+
+    //Now we just convert back to a complex number and return it
+    return std::polar(magnitude, phaseAfter);
 
 }
 
@@ -371,6 +401,8 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     fftmagnitude.resize(s_fft);
     std::fill(fftmagnitude.begin(), fftmagnitude.end(), 0);
 
+    //Modify the size of the last phase vector so that it has all the relavent information
+
 
 
     
@@ -396,6 +428,9 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
         //Get a pointer with the new data
         auto* bufferData = buffer.getWritePointer(channel);
+        auto* unmodifiedPhases = phaseBefore.getWritePointer(channel);
+        auto* modifiedPhases = phaseAfter.getWritePointer(channel);
+
 
 
         //Use this to know how many samples have not yet been processed
@@ -430,14 +465,18 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //Perform the forward FFT
             forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
+            //We need to initialize a vector to store previous phases for the pitch shifting
+
+
             //Now we go through each bin and do frequency processing
-            for (int bin = 0; bin < s_fft/2; bin++) {
+            for (int bin = 0; bin < currentSettings.s_win; bin++) {
                 std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
 
 
 
                 switch (currentSettings.effect) {
                 case Shift:
+                    fftComplex = doPitchShift(fftComplex, currentSettings.pitchShift, unmodifiedPhases[bin],modifiedPhases[bin], currentSettings.s_hop, bin, currentSettings.s_win);
                     break;
 
                 case Robitization:
@@ -546,7 +585,7 @@ ECE484PhaseVocoderAudioProcessor::createParamaterLayout() {
     layout.add(std::make_unique <juce::AudioParameterFloat>(
         "Pitch Shift in %",
         "Pitch Shift in %",
-        juce::NormalisableRange<float>(-5.f,5.f,1.f),
+        juce::NormalisableRange<float>(-1.f, 1.f, 0.001f),
         0.0f));
 
     juce::StringArray stringArray;
