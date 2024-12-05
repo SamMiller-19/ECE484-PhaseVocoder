@@ -356,7 +356,7 @@ std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<
     float delPhi = Omega + princArg(dPhi - Omega);
 
     //Set the lastPhase to this phase
-    phaseBefore = delPhi;
+    phaseBefore = unwrappedPhase;
 
     //Multiply the phase by the pitchshift to find the modified phase
 
