@@ -23,7 +23,7 @@ enum {
 struct Pluginsettings
 {
     float pitchShift{ 0 };
-    bool effect{ Shift };
+    int effect{ Shift };
 
 };
 
@@ -116,23 +116,42 @@ private:
 
 
     
-    //Copy audio buffer into a vector
-    void ECE484PhaseVocoderAudioProcessor::copyBuffertoVector(juce::AudioBuffer<float>& buffer, int bufStart, std::vector<float>& Vector, int vecStart, int numSamples, int channel);
-
+    /*********************************************************Time DOmain Processing**************************************************/
     //Hann window a vector of data
     void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size);
 
     //Circular shift data of size by shift t
     void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector, int size, unsigned int shift);
 
-    //Update an output buffer with the circular buffer starting at the read position
-    void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& outputBuffer, int outputStart, int numSamples, int channel);
+    /*****************************************************Freq domain Processing ****************************************************/
+    //Take single complex sample input and apply robotization
+    std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobitization(std::complex<float> input);
 
+    //Take single complex sample input and apply Whisperization
+    std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input);
+
+    //Take single complex sample input and % pitch shift and apply Whisperization
+    std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input, float pPitchShift)
+
+
+    /*****************************************************Circular Buffer ****************************************************/
+
+    //Update the Circular buffer with the data provided for num Samples starting at the beginning of the data and at write Position of the circular buffer
     void ECE484PhaseVocoderAudioProcessor::updateCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int writePosition, int channel);
-    void ECE484PhaseVocoderAudioProcessor::updateFromCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int readPosition, int channel);    
+
+    //Add numSamples of data to CircularBuffer adding to existing data from the circular buffer starting at at read Position
     void ECE484PhaseVocoderAudioProcessor::addToCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int writePosition, int channel, float gain);
+
+    //Update numSamples of Data starting from the beginning of data and from the circular buffer at read Position
+    void ECE484PhaseVocoderAudioProcessor::updateFromCircBuffer(float* Data, int numSamples, juce::AudioBuffer<float>& circBuffer, int readPosition, int channel);    
+
+    //Set numSamples of channel of circular buffer starting from writePosition to zero
     void ECE484PhaseVocoderAudioProcessor::clearCircBuffer(juce::AudioBuffer<float>& circBuffer, int numSamples, int writePosition, int channel);
 
+    //Update index by of buffer of size by increment
     void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increment, unsigned int size);
+
+   
+
 
 };

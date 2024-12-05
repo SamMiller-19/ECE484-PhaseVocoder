@@ -159,31 +159,8 @@ bool ECE484PhaseVocoderAudioProcessor::isBusesLayoutSupported (const BusesLayout
 }
 #endif
 
-//Note the array must contain indexes between bufferstart and bufferend
-void ECE484PhaseVocoderAudioProcessor::copyBuffertoVector(juce::AudioBuffer<float>& buffer, int bufStart, std::vector<float>& Vector, int vecStart, int numSamples, int channel) {
-    auto* bufferData = buffer.getWritePointer(channel);
-    int bufferSize = buffer.getNumSamples();
 
-    for (int i = 0; i < numSamples; i++) {
-        Vector[vecStart+i]=bufferData[bufStart + i];
-    }
-
-}
-
-
-//Update a set number of samples from the circular buffer. Note we update half a buffer back in time because we need to make sure all the phase vocoder data is there
-void ECE484PhaseVocoderAudioProcessor::updateOutputBuffer(std::vector<float>& Window, int windowStart, juce::AudioBuffer<float>& buffer, int outputStart, int numSamples, int channel) {
-
-    auto* outputData = buffer.getWritePointer(channel);
-    int s_output_size = buffer.getNumSamples();
-
-
-    for (int i = 0; i < numSamples; i++) {
-        outputData[i + outputStart] = Window[i + windowStart] + outputData[i + outputStart];
-    }
-
-}
-
+//Multiply the window by the hann window
 void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, int size) {
     unsigned long i;
     double phase = 0, delta;
@@ -198,6 +175,7 @@ void ECE484PhaseVocoderAudioProcessor::hannWindow(std::vector<float>& Vector, in
 
 }
 
+//Shift the whole buffer by the set amount
 void ECE484PhaseVocoderAudioProcessor::circularShift(std::vector<float>& Vector, int size,unsigned int shift) {
     std::vector<float> copy = Vector;
 
@@ -313,11 +291,55 @@ void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increme
     
 
 }
+std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobitization(std::complex<float> input) {
+
+    float angle = arg(input);
+    float magnitude = abs(input);
 
 
+    //Set phase to zero
+    angle = 0;
+
+
+    ////Convert back to complex number
+    return std::polar(magnitude, angle);
+
+}
+std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input) {
+
+    float angle = arg(input);
+    float magnitude = abs(input);
+
+
+    //take a random value from 0 to 1 
+    float random = juce::Random::getSystemRandom().nextFloat();
+
+    angle = 2*M_PI*random;
+
+    ////Convert back to complex number
+    return std::polar(magnitude, angle);
+
+}
+
+std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input, float pPitchShift) {
+
+    float angle = arg(input);
+    float magnitude = abs(input);
+
+
+    //take a random value from 0 to 1 
+    float random = juce::Random::getSystemRandom().nextFloat();
+
+    angle = 2 * M_PI * random;
+
+    ////Convert back to complex number
+    return std::polar(magnitude, angle);
+
+}
 
 void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    
     
     
     juce::ScopedNoDenormals noDenormals;
@@ -328,9 +350,10 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     int inputSamples = inputBuffer.getNumSamples();
     int outputSamples = outputBuffer.getNumSamples();
 
+    //Get Current Plugin Settings
+    Pluginsettings currentSettings= getPluginSettings(layout);
 
-   // outRead = inWrite - s_win;
-    updateBufferIndex(outRead, 0, outputSamples);
+
     //Initialize the FFT processing vector
     std::vector<float> fftmagnitude;
 
@@ -381,19 +404,6 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
         
         updateBufferIndex(inWrite, numSamples, inputSamples);
 
-        //inputBuffer.copyFrom(channel,0, temp, channel, numSamples,s_IOBuf-numSamples);
-
-        ////Copy the inputBuffer in from the input data
-        //
-        //inputBuffer.copyFrom(channel, s_IOBuf  - numSamples, buffer, channel, 0, numSamples);
-
-        ////Do the same for the output buffer
-        //temp = outputBuffer;
-        //outputBuffer.copyFrom(channel, 0, temp, channel, numSamples, s_IOBuf - numSamples);
-
-        ////Clear the end of the buffer so that new data can be added on top
-        //outputBuffer.clear(channel, s_IOBuf - numSamples,numSamples);
-
 
 
 
@@ -412,13 +422,10 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //apply the hann windowing
             hannWindow(fftmagnitude, s_win);
 
-            //shift data to the left, this is to ensure phase is flat
+            //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
+            // The one in class
             //circularShift(fftmagnitude, s_win, s_win / 2);
 
-
-            //Now we perform the FFT on the data stored in same location
-            //Now 
-            //std::vector<std::complex<float>>fftComplex = realToComplex(fftmagnitude);
 
             forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
 
@@ -426,19 +433,22 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             for (int bin = 0; bin < s_fft/2; bin++) {
                 std::complex<float> fftComplex {fftmagnitude[2 * bin], fftmagnitude[2 * bin + 1]};
 
-                float angle = arg(fftComplex);
-                float magnitude = abs(fftComplex);
 
 
-                ////Do proces sing right now this is robotization
+                switch (currentSettings.effect) {
+                case Shift:
+                    break;
 
-                ///* ------------------------TODO Processing--------------------------*/
-                angle = 0;
+                case Robitization:
+                    fftComplex=doRobitization(fftComplex);
+                    break;
+                
+                case Whisperization:
+                    fftComplex= doWhisperization(fftComplex);
+                    break;
+                }
 
-                ///*------------------------TODO Processing--------------------------*/
-
-                ////Convert back to complex number
-                fftComplex = std::polar(magnitude, angle);
+               
 
                 fftmagnitude[2 * bin] = fftComplex.real();
                 fftmagnitude[2 * bin+1] = fftComplex.imag();
@@ -448,13 +458,11 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //Takes the inverse transform
             forwardFFT.performRealOnlyInverseTransform(fftmagnitude.data());
 
-           // //Inverse shift the data so it's centered again
-           //circularShift(fftmagnitude, s_win, s_win / 2);
+            //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
+            // The one in class
+            //circularShift(fftmagnitude, s_win, s_win / 2);
 
-            //Update the Circular buffer with 
             //Copy window data back into the output buffer
-                
-
             addToCircBuffer(fftmagnitude.data(), s_win, outputBuffer, outWrite, channel, ftfactor);
             
             updateBufferIndex(outWrite, s_hop, outputSamples);
@@ -463,18 +471,14 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
         }
         
-        //After this, we want to reset the 
-        //    
-        //}
-        //copy from the middle of the sample since this guarantees all the FFTs have been completed
+        //Update the output buffer, note that this is placed well after the input buffer so that all processing can take place first
         updateFromCircBuffer(bufferData, numSamples, outputBuffer, outRead, channel);
+        //Clear the parts of the buffer that have been read
         clearCircBuffer(outputBuffer, numSamples,outRead,channel);
-        //Update the out read buffer
         
+        //Update the out read buffer index
         updateBufferIndex(outRead, numSamples, outputSamples);
 
-        //Decrement the IO Index by a numSamples so that it reflects the fact that the correct amount of data has been moved
-        //IOIndex -= numSamples;
 
         //If we're not on our last channel we want to reset the samples
         if (channel < totalNumInputChannels - 1) {
