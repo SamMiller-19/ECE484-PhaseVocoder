@@ -110,10 +110,10 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     outputBuffer.clear();
 
     //Set the size of the previous phase info to the max window size
-    phaseBefore.setSize(getTotalNumInputChannels(), s_win_max);
+    phaseBefore.setSize(getTotalNumInputChannels(), 2*s_win_max);
     phaseBefore.clear();
 
-    phaseAfter.setSize(getTotalNumInputChannels(), s_win_max);
+    phaseAfter.setSize(getTotalNumInputChannels(), 2*s_win_max);
     phaseAfter.clear();
 
 
@@ -287,15 +287,18 @@ void ECE484PhaseVocoderAudioProcessor::updateFromCircBuffer(float* Data, int num
 
 void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increment, unsigned int size) {
     index += increment;
-    while (index > (int)size) {
-        index -= size;
-    }
-    
-    while (index < 0) {
+   /* index %= (int)size;
+
+    if (index < 0) {
         index += size;
     }
-            
-        
+     */       
+    while (index > (int)size) {
+        index -= (int)size;
+     }
+    while(index < 0) {
+        index += size;
+    }
     
 
 }
@@ -329,31 +332,28 @@ std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::comp
 
 }
 /* Princarg function only really used by do Pitch shift wraps function to -pi to pi*/
-float princArg(float phase) {
-    while (phase > M_PI)
-        phase -= 2 * M_PI;
+double princArg(double phase) {
+    int closestindex = round(phase / (2 * M_PI));
 
-    while (phase < -M_PI)
-        phase += 2 * M_PI;
 
-    return phase;
+    return (double)phase-(double)closestindex;
 
 }
 
 std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<float> input, float pitchShift, float& phaseBefore, float& phaseAfter, int an_hop, int bin, int s_win){
-    float unwrappedPhase = arg(input);
-    float magnitude = abs(input);
+    double unwrappedPhase = arg(input);
+    double magnitude = abs(input);
 
     //Calculate the frequency in per samples
-    float frequency = 2.0f * M_PI * (float)bin / (float)s_win;
+    double frequency = 2.0f * M_PI * (double)bin / (double)s_win;
     //Calculate omega in time
-    float Omega = frequency * (float)an_hop;
+    double Omega = frequency * (double)an_hop;
 
     //Calculate the difference between the phases
-    float dPhi = unwrappedPhase - phaseBefore;
+    double dPhi = unwrappedPhase - phaseBefore;
 
     //Calculate the true phase by unwrapping the phase
-    float delPhi = Omega + princArg(dPhi - Omega);
+    double delPhi = Omega + princArg(dPhi - Omega);
 
     //Set the lastPhase to this phase
     phaseBefore = unwrappedPhase;
@@ -363,7 +363,7 @@ std::complex<float> ECE484PhaseVocoderAudioProcessor::doPitchShift(std::complex<
     phaseAfter=princArg(phaseAfter+delPhi*pitchShift);
 
     //Now we just convert back to a complex number and return it
-    return std::polar(magnitude, phaseAfter);
+    return std::polar((float)magnitude, (float)phaseAfter);
 }
 std::vector<float> ECE484PhaseVocoderAudioProcessor::compressWindow(std::vector<float>& originalWindow, float compress) {
     int s_win = originalWindow.size();
@@ -411,15 +411,19 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     Pluginsettings currentSettings = getPluginSettings(layout);
 
     //Set this factor so we scale based on the values
-    int hop_syn = currentSettings.s_hop;
-    int hop_an = hop_syn;
+    int hop_an = currentSettings.s_hop;
+
+    float hop_syn;
     if (currentSettings.effect == Shift) {
-        hop_an = round(hop_syn /(1+ currentSettings.pitchShift));
+        hop_syn = round(hop_an * currentSettings.pitchShift);
+    }
+    else {
+        hop_syn = hop_an;
     }
     float trueShift = (float)hop_syn / hop_an;
 
     
-    float ftfactor = currentSettings.s_hop * 2.0 / currentSettings. s_win;
+    float ftfactor = hop_an * 2.0 / currentSettings. s_win;
 
     //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
     const int s_fft{ 2 * currentSettings.s_win };
@@ -610,7 +614,7 @@ void ECE484PhaseVocoderAudioProcessor::setStateInformation (const void* data, in
 Pluginsettings getPluginSettings(juce::AudioProcessorValueTreeState& layout) {
 
     Pluginsettings settings;
-    settings.pitchShift = layout.getRawParameterValue("Pitch Shift in %")->load();
+    settings.pitchShift = layout.getRawParameterValue("Ratio of original pitch")->load();
     settings.effect = layout.getRawParameterValue("Effect")->load();
     int hopIndex = layout.getRawParameterValue("Hop Size")->load();
     int winIndex = layout.getRawParameterValue("Window Size")->load();
@@ -631,10 +635,10 @@ ECE484PhaseVocoderAudioProcessor::createParamaterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
     layout.add(std::make_unique <juce::AudioParameterFloat>(
-        "Pitch Shift in %",
-        "Pitch Shift in %",
-        juce::NormalisableRange<float>(-1.f, 1.f, 0.001f),
-        0.0f));
+        "Ratio of original pitch",
+        "Ratio of original pitch",
+        juce::NormalisableRange<float>(0.5f, 2.f, 0.001f),
+        1.f));
 
     juce::StringArray stringArray;
     for (int power = 2; power < 12; power++) {
