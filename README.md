@@ -16,13 +16,20 @@ This can be represented using the following  equation
 
 $P_{out} = Pitch_{in}\times(1+Pitch_{Shift})$
 
+It's worth noting that this only actually modifies pitch when pitch is in Pitch Shift mode.
 ### Window Size
 This is a selector that represents the size of the FFT window that will be taken to analyze the signal. Note that the size is set to powers of 2 to optomize efficiency. Window size should be at 
-least $2\times hop size$ at all times but this is not explicitley limited in code.
+least $2\times hop size$ at all times but this is not explicitley limited in code.It's also worth noting that if $Window size>hop size \times 16$ There may be some performance issues
 
 ### Hop Size
 This is a selector that represents the distance of hops between FFT windows that are taken to analyze the signal. Note that the size is set to powers of 2 to optomize efficiecny. Hop size should be
-less than $\frac{window size}{2}$ at all times.
+less than $\frac{window size}{2}$ at all times. It's also worth noting that if $Hop size<\frac{window size}{16}$ There may be some performance issues.
+
+### Effect
+This is a selector that allows you to change the effects. A description of each mode is below:
+- Pitch Shift: This modifies the pitch by the amount input in Pitch Shift
+- Robitization: This modifies the phase of each fft bin to be zero which gives a robot type effect to the vocals.
+- Whisperization: This modifies the phase of each fft bin to be a random value between -pi to pi
 
 ## Background and Theory
 
