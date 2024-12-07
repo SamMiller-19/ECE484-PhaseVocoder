@@ -32,6 +32,22 @@ This is a selector that allows you to change the effects. A description of each 
 - Whisperization: This modifies the phase of each fft bin to be a random value between -pi to pi
 
 ## Background and Theory
+This project uses a phase vocoder based on the principles outlined in Audio Effects Theory, Implementation and Application by Joshua D. Reiss Andrew P. McPherson and DAFX: Digital Audio Effects, Second Edition edited by Udo Zolzer.
+
+To implement the phase vocoder the following steps were taken:
+- Take a window samples of window size specified by user.
+- Multiply the function by a Hann window.
+- Apply an in-place FFT to the window (can use out of place but the sample must be rotated in this case).
+- Itterate through each frequency bin and perform operations to modify the frequency.
+- Apply an in-place inverse FFT to the window.
+- If pitch shifting resample the window to expand or compress the audio to change pitch.
+- Move onto the next frame by moving by hop size.
+
+Some more information on how these steps are implemented are below
+
+### Frequency Processinng 
 
 ## Implementation
+
+
 
