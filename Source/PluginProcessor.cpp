@@ -100,7 +100,7 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     //Window Size
     //We set this to be an arbitrarily large number as the sampleRate can change
     //And we don't want to resize our buffers
-    int s_IOBuf = 2*s_win_max+samplesPerBlock;
+    int s_IOBuf = 2*s_win_max+samplesPerBlock+1;
     // = 0.25 * sampleRate;
 
     inputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
@@ -336,7 +336,7 @@ double princArg(double phase) {
     int closestindex = round(phase / (2 * M_PI));
 
 
-    return (double)phase-(double)closestindex;
+    return (double)phase-(double)closestindex*2*M_PI;
 
 }
 
@@ -423,7 +423,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     float trueShift = (float)hop_syn / hop_an;
 
     
-    float ftfactor = hop_an * 2.0 / currentSettings. s_win;
+    float ftfactor = hop_syn * 2.0 / currentSettings. s_win;
 
     //Initialize fft size (normally just window size, multiplied by 2 because the fft is real)
     const int s_fft{ 2 * currentSettings.s_win };
@@ -501,6 +501,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
             // The one in class
             //circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
+            circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
 
             //Perform the forward FFT
             forwardFFT.performRealOnlyForwardTransform(fftmagnitude.data());
@@ -550,7 +551,7 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
             //shift data to the left, this is to ensure phase is flat. This actually causes the inverse effect as the FFT algorithm is different from
             // The one in class
             //circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
-
+            circularShift(fftmagnitude, currentSettings.s_win, currentSettings.s_win / 2);
             //Copy window data back into the output buffer
             addToCircBuffer(fftmagnitude.data(), fftmagnitude.size(), outputBuffer, outWrite, channel, ftfactor);
             updateBufferIndex(outWrite, hop_an, outputSamples);
