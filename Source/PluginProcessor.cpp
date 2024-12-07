@@ -100,7 +100,7 @@ void ECE484PhaseVocoderAudioProcessor::prepareToPlay (double sampleRate, int sam
     //Window Size
     //We set this to be an arbitrarily large number as the sampleRate can change
     //And we don't want to resize our buffers
-    int s_IOBuf = 2*s_win_max+samplesPerBlock+1;
+    int s_IOBuf = 4*s_win_max+2*samplesPerBlock+1;
     // = 0.25 * sampleRate;
 
     inputBuffer.setSize(getTotalNumInputChannels(), s_IOBuf);
@@ -302,7 +302,7 @@ void ECE484PhaseVocoderAudioProcessor::updateBufferIndex(int& index, int increme
     
 
 }
-std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobitization(std::complex<float> input) {
+std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobotization(std::complex<float> input) {
 
     float angle = arg(input);
     float magnitude = abs(input);
@@ -325,7 +325,7 @@ std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::comp
     //take a random value from 0 to 1 
     float random = juce::Random::getSystemRandom().nextFloat();
 
-    angle = 2*M_PI*random;
+    angle = 2*M_PI*random-M_PI;
 
     ////Convert back to complex number
     return std::polar(magnitude, angle);
@@ -411,16 +411,16 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
     Pluginsettings currentSettings = getPluginSettings(layout);
 
     //Set this factor so we scale based on the values
-    int hop_an = currentSettings.s_hop;
+    int hop_syn = currentSettings.s_hop;
 
-    float hop_syn;
+    int hop_an;
     if (currentSettings.effect == Shift) {
-        hop_syn = round(hop_an * currentSettings.pitchShift);
+        hop_an = round(hop_syn / currentSettings.pitchShift);
     }
     else {
-        hop_syn = hop_an;
+        hop_an = hop_syn;
     }
-    float trueShift = (float)hop_syn / hop_an;
+    float trueShift = (float)hop_syn / (float)hop_an;
 
     
     float ftfactor = hop_syn * 2.0 / currentSettings. s_win;
@@ -517,15 +517,27 @@ void ECE484PhaseVocoderAudioProcessor::processBlock (juce::AudioBuffer<float>& b
 
                 switch (currentSettings.effect) {
                 case Shift:
+                    
                     fftComplex = doPitchShift(fftComplex, trueShift, unmodifiedPhases[bin],modifiedPhases[bin], hop_an, bin, currentSettings.s_win);
                     break;
 
-                case Robitization:
-                    fftComplex=doRobitization(fftComplex);
+                case Robotization:
+                    
+                    fftComplex=doRobotization(fftComplex);
+                    
+
                     break;
                 
                 case Whisperization:
-                    fftComplex= doWhisperization(fftComplex);
+                    if (bin < currentSettings.s_win / 2)
+                        fftComplex= doWhisperization(fftComplex);
+                        
+                    else {
+                        //Make sure it's conjugate symettric
+                        std::complex<float> temp{ fftmagnitude[2 * currentSettings.s_win - 2 * bin], -fftmagnitude[2 * currentSettings.s_win - 2 * bin + 1] };
+
+                        fftComplex =temp;
+                    }
                     break;
                 }
 
@@ -652,7 +664,7 @@ ECE484PhaseVocoderAudioProcessor::createParamaterLayout() {
 
     stringArray.clear();
     stringArray.add("Pitch Shift");
-    stringArray.add("Robitization");
+    stringArray.add("Robotization");
     stringArray.add("Whisperization");
 
     layout.add(std::make_unique<juce::AudioParameterChoice>("Effect", "Effect", stringArray, 0));

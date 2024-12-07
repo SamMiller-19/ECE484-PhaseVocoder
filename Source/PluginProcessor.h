@@ -16,7 +16,7 @@
 
 enum {
     Shift=0,
-    Robitization = 1,
+    Robotization = 1,
     Whisperization = 2
 };
 
@@ -120,7 +120,7 @@ private:
 
     /*****************************************************Freq domain Processing ****************************************************/
     //Take single complex sample input and apply robotization
-    std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobitization(std::complex<float> input);
+    std::complex<float> ECE484PhaseVocoderAudioProcessor::doRobotization(std::complex<float> input);
 
     //Take single complex sample input and apply Whisperization
     std::complex<float> ECE484PhaseVocoderAudioProcessor::doWhisperization(std::complex<float> input);
