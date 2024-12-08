@@ -1,8 +1,11 @@
 # JUCE BASED PHASE VOCODER
-This Vocoder was developed by Sam Miller in completion of the requirements of ECE 484 at the University of Victoria During the Fall of 2024.
+This Vocoder was developed by Sam Miller in completion of the requirements of ECE 484 at the University of Victoria During the Fall of 2024. To see the full project please go to https://github.com/SamMiller-19/ECE484-PhaseVocoder.
+
 ## Overview
 
-This repository contains the source code necessary to implement a phase vocoder using the JUCE framework. The repository contains several files. If you want to use the plugin, there is an ECE484-phaseVocoder.vst3 file in the repository which can be imported into audio processing software. Beyond this, there is a .jucer file which can be used with projucer to build the project, as well as PluginProcessor.cpp/h files which do the audio processing, and PluginEditor.cpp/h files that can be used to modify the appearance of the plugin.
+This repository contains the source code necessary to implement a phase vocoder using the JUCE framework. The repository contains several files. If you want to use the plugin, there is an ECE484-phaseVocoder.vst3 file in the repository which can be imported into audio processing software. To do this audacity in windows copy the file into C:$\backslash$ Program Files$\backslash$ Common Files$\backslash$ VST3 (Make a VST3 folder if it doesn't exist).
+
+Beyond this, there is a .jucer file which can be used with projucer to build the project, as well as PluginProcessor.cpp/h files which do the audio processing, and PluginEditor.cpp/h files that can be used to modify the appearance of the plugin.
 
 To read more about the JUCE framework see their documentation at https://juce.com/.
 
