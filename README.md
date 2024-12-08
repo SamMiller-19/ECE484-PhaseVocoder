@@ -1,15 +1,12 @@
 # JUCE BASED PHASE VOCODER
-ECE484
-
-Sam Miller
-
+This Vocoder was developed by Sam Miller in completion of the requirements of ECE 484 at the University of Victoria During Fall of 2024.
 ## Overview
 
-This repository contains the source code necesarry to implement the 
+This repository contains the source code necesarry to implement a phase vocoder with Juce. The repository contains several files. If you just want to use the plugin, there is a ECE484-phaseVocoder.vst3 file which can be imported into audio processing software. Beyond this there is a .jucer file which can be used with projucer to build the project, as well as PluginProcessor.cpp/h files which do the audio processing and PluginEditor.cpp/h files that can be used to modify the apperance of the plugin.
 
-## Downloading 
+To read more about the .juce framework see their documentation at https://juce.com/
 
-## Usage
+## Using the Plugin
 This Phase Vocoder is designed to implement a variety of features. This plugin can operate as a real time processing plugin or as a pre-processed plugin. The different adjustable items are as follows:
 
 ### Pitch Shift
@@ -41,33 +38,29 @@ A few notes can be made about each of these parameters
 - For Robotization and Whisperization if $Hop Size > \frac{1}{2}$ there will be distortion as the original signal cannot be perfectly reconstructed with this large of a hop size
 - For Robotization changing the hop size wil vary the pitch.
 
+## Get Started Building and Editing the Plugin
+To work on this project you will first need to install Juce and Projucer. This can be installed from https://juce.com/download/.
 
-## Signal Processing and Technical Implementation
+Next you will need to install the repository https://github.com/SamMiller-19/ECE484-PhaseVocoder to some location on your desktop. Once this has been cloned run the ECE484-PhaseVocoder.jucer file using projucer. This will load all the required modules into the project and build it for you. From here you should be able to open the files in an IDE and begin working on it. To see more about starting a project in juce see https://docs.juce.com/master/tutorial_new_projucer_project.html.
+
+## Technical Information About this Plugin
 This project uses a phase vocoder based on the principles outlined in Audio Effects Theory, Implementation and Application by Joshua D. Reiss Andrew P. McPherson and DAFX: Digital Audio Effects, Second Edition edited by Udo Zolzer.
 
-To implement the phase vocoder the following steps were taken:
-- Window each sample using the Hann/Hamming window function.
-- Apply an in-place FFT to the window (can use out of place but the sample must be rotated in this case).
-- Itterate through each frequency bin and perform operations to modify the frequency.
-- Apply an in-place inverse FFT to the window.
-- If pitch shifting resample the window to expand or compress the audio to change pitch.
-- Move onto the next frame by moving by hop size.
-
-Some more information on how these steps are implemented are below.
+This implementation also makes use of circular buffers to store the output and input information. These circular buffers are not a part of C++ or juce and funcitons to handle them are written into the code. The idea of a circular buffer is that each buffer has a stored read and/or write position which is stored in memory, when this exceeds the buffer size it loops back to zero. This means data is constintely being overwritten by the circular buffer but if used correctly this limits the amount of memory needed by your prigram.
 
 ### Step One: Copy input buffer into circular buffer.
 
 The juce framework supports real-time processing by taking input samples in audio buffers of a size determined by the environment the plugin is running in. However, the phase vocoder needs not only the current information, but also information of at least one window size into the future, and one window size into the past. In order to do this we make a circular input and output buffer of size $2\times s_{win max}+s_{buffer}$ Where $s_{win max}$ is the max window size and $s_{buffer}$ is the size of the buffer we are reading from.
 
-Using this buffer we copy one buffer of data into the input buffer. Circular buffers are implemented in such a way as to overwrite old data with new data so this will remove the data from two windows ago that is no longer needed.
+Using this buffer we copy one buffer of data into the input buffer and advance the buffer position by the hop size
 
 ### Step Two: Hann Windowing
 
 To window the functions the input data is broken into windows. For each buffer windows are taken by advancing the start of the windows by the hop size. If the end of the window exceeds the edge of the buffer then it stops window. For each window a Hanning window is applied to center the functions. This makes the transitions between windows much less jarring and limits audio artifacts from the vocoder. To window the function each sample is multiplied by the below function where Where n represents the current sample of the window and N is the sample side
 
-$ 1-cos(\frac{2\pi n}{N}) $ 
+$1-cos(\frac{2\pi n}{N})$ 
 
-### Step Three: Take the FFT
+### Step Three: Apply the Forward FFT
 To transform the function into the frequency domain a fast fourier transform (FFT) is used. In our case the built-in juce FFT class was used to compute the transform. This allows us to process the signals in the frequency domain. It's worth noting that this a real only frequency transform was used since we are only interested in real signals in the time domain. The function used to use this is found in the juce::dsp::fft class and is called performRealOnlyForwardTransform()
 
 ### Step Four: Apply Frequency Modulation
@@ -82,9 +75,21 @@ For whisperization the phase of each sample is instead set to a random value bet
 ### Step Five: Apply Inverse FFT
 For this simply take the inverse FFT by invoking the same juce object used in the forward FFT.  The function used to use this is found in the juce::dsp::fft class and is called performRealOnlyInverseTransform()
 
-### Step Six: Resample the Window to Apply Pitch Shift
+### Step Six: Resample the Window to Apply Pitch Shift (Pitch Shifting only)
 
-To actually shift the pitch we need to resample the window to actually shift the pitch. To raise the signal pitch we need to shrink the window size and to the lower the pitch we need to increase the window size. To do this the window is compressed/expanded by the pitch shift. However, in most cases 
+To actually shift the pitch we need to resample the window to actually shift the pitch. To raise the signal pitch we need to shrink the window size and to the lower the pitch we need to increase the window size. To do this the window is compressed/expanded by the pitch shift. However, in most cases, this leads to some of the resampled indexes being non-integer. To compensate this we use linear interpolation from the two nearest values to calculate the interpolated values. The formula for this is shown below.
+
+$f_{resample}[n]=f_{original}[n/shift-trunc(n/shift)](1-frac(n/shift))+f_{original}[trunc(n/shift+1)]frac(1-n/shift)
+
+Where trunc truncates the value to it's nearest whole number, and frac takes only the values after the decimal place.
+
+### Step 7: Overlap and Add
+
+To recombine the windows, take the proceesed window and add it into the output circular buffer starting at the write position of the output buffer. Advance the write position of the output buffer by the hop size.
+
+### Step 8: Copy Data Back to Audio Buffer
+
+In order for the audio to actually play data we need to copy the data into the same buffer that we read the input from. However, in order to make sure that all overlapping windows from the buffer have been processed, there must be a delay of the maximum window size on this read from where the input data is actually being read. This does put a slight delay on the real time processing but it is the only way to process the data in real time without heavy distortion of the input signal.
 
 
 
