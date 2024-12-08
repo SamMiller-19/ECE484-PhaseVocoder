@@ -2,51 +2,54 @@
 This Vocoder was developed by Sam Miller in completion of the requirements of ECE 484 at the University of Victoria During Fall of 2024.
 ## Overview
 
-This repository contains the source code necesarry to implement a phase vocoder with Juce. The repository contains several files. If you just want to use the plugin, there is a ECE484-phaseVocoder.vst3 file which can be imported into audio processing software. Beyond this there is a .jucer file which can be used with projucer to build the project, as well as PluginProcessor.cpp/h files which do the audio processing and PluginEditor.cpp/h files that can be used to modify the apperance of the plugin.
+This repository contains the source code necesarry to implement a phase vocoder using the JUCE framework. The repository contains several files. If you just want to use the plugin, there is a ECE484-phaseVocoder.vst3 file which can be imported into audio processing software. Beyond this there is a .jucer file which can be used with projucer to build the project, as well as PluginProcessor.cpp/h files which do the audio processing and PluginEditor.cpp/h files that can be used to modify the apperance of the plugin.
 
-To read more about the .juce framework see their documentation at https://juce.com/
+To read more about the JUCE framework see their documentation at https://juce.com/.
 
 ## Using the Plugin
-This Phase Vocoder is designed to implement a variety of features. This plugin can operate as a real time processing plugin or as a pre-processed plugin. The different adjustable items are as follows:
+This Phase Vocoder is designed to implement a variety of features. This plugin can operate in real-time or by pre-processing the audio. The different adjustable items are as follows:
 
 ### Pitch Shift
-This is a slider that represents the pitch shift of the phase vocoder in %. A positive pitch shifts represents a positive change in pitch (e.g. increasing the pitch), and a negative pitch shifts represents a negative change in pitch (e.g. decreasing the pitch.
-This can be represented using the following  equation
+This is a slider that represents the ratio of the modified pitch divided by the original pitch. A pitch greater than one represents a positive change in pitch (e.g. increasing the pitch), and a pitch less than one represents a negative change in pitch (e.g. decreasing the pitch).
 
-$P_{out} = Pitch_{in}\times(1+Pitch_{Shift})$
+The change in pitch can be represented with the below equation:
+
+$P_{out} = Pitch_{in}\times Shift$
 
 It's worth noting that this only actually modifies pitch when pitch is in Pitch Shift mode.
 ### Window Size
 This is a selector that represents the size of the FFT window that will be taken to analyze the signal. Note that the size is set to powers of 2 to optomize efficiency. Window size should be at 
-least $2\times hop size$ at all times but this is not explicitley limited in code.It's also worth noting that if $Window size>hop size \times 16$ There may be some performance issues
+least $2\times hop size$ at all times but this is not explicitley limited in code.It's also worth noting that if $Window size>hop size \times 16$, there may be some performance issues if processing in real time.
 
 ### Hop Size
 This is a selector that represents the distance of hops between FFT windows that are taken to analyze the signal. Note that the size is set to powers of 2 to optomize efficiecny. Hop size should be
-less than $\frac{window size}{2}$ at all times. It's also worth noting that if $Hop size<\frac{window size}{16}$ There may be some performance issues.
+less than $\frac{window size}{2}$ at all times. It's also worth noting that if $Hop size<\frac{window size}{16}$, there may be some performance issues if processing in real time.
 
 ### Effect
-This is a selector that allows you to change the effects. A description of each mode as well as the recommended window and hop sizes are below.:
+This is a selector that allows you to change the effects. A description of each mode as well as the recommended window and hop sizes are below:
 |Parameter|Pitch Shift|Robotization|Whisperation|
-|---------|-----------|------------|-----------|
+|:---------:|:-----------:|:------------:|:-----------:|
 |Description|Modifies the pitch by the amount input in Pitch Shift|modifies the phase of each fft bin to be zero which gives a robot type effect to the vocals|modifies the phase of each fft bin to be a random value between -pi to pi|
 |Window Size (samples)| 1024-4096 | <=2048 | 64-256 |
-|Hop Size (fraction of Window Size)| $<=\frac{1}{8}$|$<=\frac{1}{2}$| $<=\frac{1}{2}$|
+|Hop Size (fraction of Window Size)| $<=\frac{1}{8} Window Size$|$<=\frac{1}{2} Window Size$| $<=\frac{1}{2} Window Size$|
 
 A few notes can be made about each of these parameters
-- For all cases if $Hop Size<\frac{1}{32} Window Size$ There will be significant issues in real time processing due to the number of FFTs that must be taken. If you need to lower the hop size or raise the window size by this much it's recommended to pre-apply the effect.
+- For all cases if $Hop Size<\frac{1}{32} Window Size$ There will be significant issues in real time processing due to the number of FFTs that must be taken. If you need to lower the hop size or raise the window size outside of this bound it's recommended to not use the effect in real time.
 - For Pitch shift, if $Hop Size > \frac{1}{8}$ There will be notable distortion and artifacting from the pitch shift due to the inaccuracies of predicting changes of phase in the predictive algorithm outlined in class. The exact value for this might vary depending on the signal
 - For Robotization and Whisperization if $Hop Size > \frac{1}{2}$ there will be distortion as the original signal cannot be perfectly reconstructed with this large of a hop size
-- For Robotization changing the hop size wil vary the pitch.
+- For Robotization changing the hop size will vary the pitch.
 
 ## Get Started Building and Editing the Plugin
 To work on this project you will first need to install Juce and Projucer. This can be installed from https://juce.com/download/.
 
 Next you will need to install the repository https://github.com/SamMiller-19/ECE484-PhaseVocoder to some location on your desktop. Once this has been cloned run the ECE484-PhaseVocoder.jucer file using projucer. This will load all the required modules into the project and build it for you. From here you should be able to open the files in an IDE and begin working on it. To see more about starting a project in juce see https://docs.juce.com/master/tutorial_new_projucer_project.html.
 
-## Technical Information About this Plugin
-This project uses a phase vocoder based on the principles outlined in Audio Effects Theory, Implementation and Application by Joshua D. Reiss Andrew P. McPherson and DAFX: Digital Audio Effects, Second Edition edited by Udo Zolzer.
+When you open the project you will notice there is a PluginProcess.cpp/h file and a PluginEditor.cpp/h file. In this case the PluginProcessor was used for all the audio processing. For the purpose of this project the PluginEditor files were not edited but they could be modified to change the apperance of the plugin.
 
-This implementation also makes use of circular buffers to store the output and input information. These circular buffers are not a part of C++ or juce and funcitons to handle them are written into the code. The idea of a circular buffer is that each buffer has a stored read and/or write position which is stored in memory, when this exceeds the buffer size it loops back to zero. This means data is constintely being overwritten by the circular buffer but if used correctly this limits the amount of memory needed by your prigram.
+## Technical Information About this Plugin
+This project uses a phase vocoder based on the principles outlined in Audio Effects Theory, Implementation and Application by Joshua D. Reiss Andrew P. McPherson(https://www.taylorfrancis.com/books/mono/10.1201/b17593/audio-effects-joshua-reiss-andrew-mcpherson) and DAFX: Digital Audio Effects, Second Edition edited by Udo Zolzer(https://www.dafx.de/DAFX_Book_Page_2nd_edition/index.html).
+
+It's worth noting that this implementation also makes use of circular buffers to store the output and input information. These circular buffers are not a part of C++ or the JUCE framework so all of the processing of these objects are written into this project. The idea of a circular buffer is that each buffer has a stored read and/or write position which is stored in memory, when this exceeds the buffer size it loops back to zero. This means data is constintely being overwritten by the circular buffer but if used correctly this limits the amount of memory needed by your program.
 
 ### Step One: Copy input buffer into circular buffer.
 
